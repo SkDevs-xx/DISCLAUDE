@@ -16,7 +16,7 @@ ProtectSystem=strict
 ReadWritePaths=/home/disclaude
 PrivateTmp=true
 NoNewPrivileges=true
-ProtectHome=tmpfs
+ProtectHome=false
 
 [Install]
 WantedBy=multi-user.target

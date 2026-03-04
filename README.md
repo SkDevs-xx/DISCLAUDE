@@ -19,7 +19,9 @@ Discord × Claude Code CLI で動く自律型 AI ボット。
 
 ## 必要なもの
 
-- **Python 3.12 以上**
+- **Git** — `git --version` で確認。なければ `sudo apt install git`
+- **Python 3.12 以上** — `python3 --version` で確認
+- **Node.js / npm** — Claude Code CLI のインストールに必要。`node --version` で確認。なければ [公式](https://nodejs.org/) からインストール
 - **Claude Code CLI** — [公式ドキュメント](https://docs.anthropic.com/en/docs/claude-code) に従ってインストール・認証まで済ませておく
 - **Discord Bot Token** — [Discord Developer Portal](https://discord.com/developers/applications) で Bot を作成して取得
 
@@ -42,27 +44,39 @@ sudo adduser --disabled-password --gecos "disclaude bot" disclaude
 
 ### 2. disclaude ユーザーで環境構築
 
+disclaude ユーザーに切り替えてホーム直下にクローン:
+
 ```bash
 sudo su - disclaude
-git clone https://github.com/SkDevs-xx/disclaude.git .
+git clone https://github.com/SkDevs-xx/disclaude.git
+cp -r disclaude/. /home/disclaude/
+rm -rf /home/disclaude/disclaude/
+```
+
+Python 仮想環境を作成して依存パッケージをインストール:
+
+```bash
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
+deactivate
+exit
 ```
 
 ### 3. Claude Code CLI のインストール
 ```bash
-npm install -g @anthropic-ai/claude-code
-claude auth login
+sudo npm install -g @anthropic-ai/claude-code
+su - disclaude
+claude
 ```
 
-> `claude auth login` を実行するとブラウザが開く。VPS の場合は表示される URL を手元の PC で開く。
+> `claude` を実行するとブラウザが開く。VPS の場合は表示される URL を手元の PC で開く。
 
 ### 4. Discord Bot Token の設定
 
 ```bash
-cp .env.example .env
-nano .env
+cp -p .env.example .env
+vi .env
 ```
 
 取得した Bot Token を貼り付ける:
@@ -108,7 +122,7 @@ cp .mcp.example.json .mcp.json
 
 #### .mcp.json の編集
 
-`/home/disclaude` の部分を **自分の環境の絶対パス** に置き換える:
+`/home/disclaude` の部分を **自分の環境の絶対パス** に置き換える(homeに配置していればスキップ):
 
 ```json
 {
@@ -172,7 +186,7 @@ sudo systemctl start disclaude
 | `ReadWritePaths=/home/disclaude` | disclaude の home だけ書き込み許可 |
 | `PrivateTmp=true` | `/tmp` を他プロセスと分離（覗き見できない） |
 | `NoNewPrivileges=true` | 権限昇格（sudo 等）を禁止 |
-| `ProtectHome=tmpfs` | **他ユーザーの home ディレクトリを見えなくする** |
+| `ProtectHome=false` | `ProtectSystem=strict` + `ReadWritePaths` で十分なため無効化 |
 
 これにより、Claude が `--dangerously-skip-permissions` で自由にコマンドを実行しても:
 
