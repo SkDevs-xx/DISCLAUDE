@@ -18,6 +18,7 @@ class CDPClient:
         self._next_id: int = 1
         self._pending: dict[int, asyncio.Future] = {}
         self._reader_task: Optional[asyncio.Task] = None
+        self.pending_dialog: Optional[dict] = None
         self._send_lock: asyncio.Lock = asyncio.Lock()
 
     @property
@@ -104,6 +105,28 @@ class CDPClient:
         await self.disconnect()
         await self.connect(port=port, tab_index=tab_index)
 
+    async def _handle_dialog_event(self, params: dict) -> None:
+        """ダイアログイベントを処理する。alertのみ自動OK、それ以外は保留してClaudeに委ねる。"""
+        dialog_type = params.get("type", "")
+        message = params.get("message", "")
+        url = params.get("url", "")
+
+        try:
+            if dialog_type == "alert":
+                # alert は OK しかないので自動処理
+                logger.info("Auto-accepting alert: %s", message)
+                await self.send("Page.handleJavaScriptDialog", {"accept": True})
+            else:
+                # それ以外は保留 → 次のMCPツール呼び出し時にClaudeへ通知
+                logger.info("Dialog pending for Claude: type=%s url=%s message=%s", dialog_type, url, message)
+                self.pending_dialog = {
+                    "type": dialog_type,
+                    "url": url,
+                    "message": message,
+                }
+        except Exception:
+            logger.exception("Failed to handle %s dialog", dialog_type)
+
     async def _read_loop(self) -> None:
         """WebSocket メッセージを読み続ける。"""
         try:
@@ -120,9 +143,19 @@ class CDPClient:
                                 )
                             else:
                                 fut.set_result(data.get("result", {}))
+                    elif data.get("method") == "Page.javascriptDialogOpening":
+                        asyncio.create_task(self._handle_dialog_event(data.get("params", {})))
                 elif msg.type in (aiohttp.WSMsgType.ERROR, aiohttp.WSMsgType.CLOSED):
                     break
         except asyncio.CancelledError:
-            pass
+            return
         except Exception:
             logger.exception("CDP read loop error")
+        finally:
+            # WebSocket が切れたら状態をリセットして次回の _ensure_connected で再接続させる
+            logger.warning("CDP read loop ended, marking connection as closed")
+            self._ws = None
+            for fut in self._pending.values():
+                if not fut.done():
+                    fut.set_exception(ConnectionError("CDP connection lost"))
+            self._pending.clear()

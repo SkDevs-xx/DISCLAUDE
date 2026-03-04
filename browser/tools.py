@@ -29,21 +29,40 @@ _port = _load_port()
 def register_tools(mcp: FastMCP) -> None:
     """MCP サーバーにブラウザツールを登録する。"""
 
-    async def _ensure_connected():
+    async def _ensure_connected(allow_dialog: bool = False) -> str | None:
+        """接続を確認する。保留ダイアログがあればその情報を返す（allow_dialog=True時は無視）。"""
         if not cdp.is_connected:
             await cdp.connect(port=_port)
+        if not allow_dialog:
+            return _check_pending_dialog()
+        return None
+
+    def _check_pending_dialog() -> str | None:
+        """保留中のダイアログがあれば通知用JSONを返す。なければNone。"""
+        if cdp.pending_dialog is None:
+            return None
+        d = cdp.pending_dialog
+        return json.dumps({
+            "blocked_by_dialog": True,
+            "dialog_type": d["type"],
+            "url": d["url"],
+            "message": d["message"],
+            "instruction": "ダイアログが表示されています。内容を確認し browser_handle_dialog で accept=true/false を選択してください",
+        }, ensure_ascii=False, indent=2)
 
     # ─── Navigation ───
 
     @mcp.tool(name="browser_navigate", description="指定した URL にブラウザを遷移させる")
     async def browser_navigate(url: str) -> str:
-        await _ensure_connected()
+        if block := await _ensure_connected():
+            return block
         result = await cdp.send("Page.navigate", {"url": url})
         return json.dumps({"navigated": url, "frameId": result.get("frameId", "")}, ensure_ascii=False)
 
     @mcp.tool(name="browser_back", description="ブラウザの「戻る」ボタンを押す")
     async def browser_back() -> str:
-        await _ensure_connected()
+        if block := await _ensure_connected():
+            return block
         await cdp.send("Runtime.evaluate", {
             "expression": "window.history.back()",
         })
@@ -52,13 +71,15 @@ def register_tools(mcp: FastMCP) -> None:
 
     @mcp.tool(name="browser_reload", description="現在のページを再読み込みする")
     async def browser_reload() -> str:
-        await _ensure_connected()
+        if block := await _ensure_connected():
+            return block
         await cdp.send("Page.reload")
         return json.dumps({"action": "reload"})
 
     @mcp.tool(name="browser_get_url", description="現在のページの URL を取得する")
     async def browser_get_url() -> str:
-        await _ensure_connected()
+        if block := await _ensure_connected():
+            return block
         result = await cdp.send("Runtime.evaluate", {
             "expression": "window.location.href",
             "returnByValue": True,
@@ -70,7 +91,8 @@ def register_tools(mcp: FastMCP) -> None:
 
     @mcp.tool(name="browser_click", description="指定座標 (x, y) をクリックする")
     async def browser_click(x: int, y: int) -> str:
-        await _ensure_connected()
+        if block := await _ensure_connected():
+            return block
         await cdp.send("Input.dispatchMouseEvent", {
             "type": "mousePressed", "x": x, "y": y, "button": "left", "clickCount": 1,
         })
@@ -81,7 +103,8 @@ def register_tools(mcp: FastMCP) -> None:
 
     @mcp.tool(name="browser_double_click", description="指定座標 (x, y) をダブルクリックする")
     async def browser_double_click(x: int, y: int) -> str:
-        await _ensure_connected()
+        if block := await _ensure_connected():
+            return block
         for click_count in [1, 2]:
             await cdp.send("Input.dispatchMouseEvent", {
                 "type": "mousePressed", "x": x, "y": y,
@@ -95,7 +118,8 @@ def register_tools(mcp: FastMCP) -> None:
 
     @mcp.tool(name="browser_type", description="テキストを入力する。事前にクリックで入力欄にフォーカスしてから使う")
     async def browser_type(text: str) -> str:
-        await _ensure_connected()
+        if block := await _ensure_connected():
+            return block
         for char in text:
             await cdp.send("Input.dispatchKeyEvent", {"type": "keyDown", "text": char, "key": char})
             await cdp.send("Input.dispatchKeyEvent", {"type": "keyUp", "key": char})
@@ -103,7 +127,8 @@ def register_tools(mcp: FastMCP) -> None:
 
     @mcp.tool(name="browser_clear_field", description="現在フォーカスされている入力欄の内容をクリアする")
     async def browser_clear_field() -> str:
-        await _ensure_connected()
+        if block := await _ensure_connected():
+            return block
         await cdp.send("Input.dispatchKeyEvent", {
             "type": "keyDown", "key": "a", "modifiers": 2,
         })
@@ -120,14 +145,16 @@ def register_tools(mcp: FastMCP) -> None:
 
     @mcp.tool(name="browser_press_key", description="キーボードのキーを押す（Enter, Tab, Escape 等）")
     async def browser_press_key(key: str) -> str:
-        await _ensure_connected()
+        if block := await _ensure_connected():
+            return block
         await cdp.send("Input.dispatchKeyEvent", {"type": "keyDown", "key": key})
         await cdp.send("Input.dispatchKeyEvent", {"type": "keyUp", "key": key})
         return json.dumps({"pressed": key})
 
     @mcp.tool(name="browser_scroll", description="ページをスクロールする。direction は 'up' または 'down'。amount はピクセル数（デフォルト 500）")
     async def browser_scroll(direction: str = "down", amount: int = 500) -> str:
-        await _ensure_connected()
+        if block := await _ensure_connected():
+            return block
         delta_y = amount if direction == "down" else -amount
         await cdp.send("Input.dispatchMouseEvent", {
             "type": "mouseWheel", "x": 480, "y": 540,
@@ -142,23 +169,21 @@ def register_tools(mcp: FastMCP) -> None:
         try:
             targets = await cdp.get_targets(port=_port)
             connected = cdp.is_connected
-            return json.dumps({
+            status = {
                 "connected": connected,
                 "cdp_port": _port,
                 "tabs": [{"title": t.get("title", ""), "url": t.get("url", "")} for t in targets],
-            }, ensure_ascii=False, indent=2)
+            }
+            if cdp.pending_dialog:
+                status["pending_dialog"] = cdp.pending_dialog
+            return json.dumps(status, ensure_ascii=False, indent=2)
         except Exception as e:
             return json.dumps({"connected": False, "error": str(e)}, ensure_ascii=False)
 
-    @mcp.tool(name="browser_screenshot", description="現在のページのスクリーンショットを撮る。base64 JPEG を返す")
-    async def browser_screenshot(quality: int = 70) -> str:
-        await _ensure_connected()
-        result = await cdp.send("Page.captureScreenshot", {"format": "jpeg", "quality": quality})
-        return result.get("data", "")
-
     @mcp.tool(name="browser_get_content", description="現在のページのテキスト内容を取得する")
     async def browser_get_content() -> str:
-        await _ensure_connected()
+        if block := await _ensure_connected():
+            return block
         result = await cdp.send("Runtime.evaluate", {
             "expression": "document.body.innerText",
             "returnByValue": True,
@@ -170,7 +195,8 @@ def register_tools(mcp: FastMCP) -> None:
 
     @mcp.tool(name="browser_find_element", description="テキストまたは CSS セレクタで要素を探し、座標とテキストを返す。見つからなければ空リスト")
     async def browser_find_element(text: str = "", selector: str = "") -> str:
-        await _ensure_connected()
+        if block := await _ensure_connected():
+            return block
         if selector:
             js = f"""
                 (() => {{
@@ -228,7 +254,8 @@ def register_tools(mcp: FastMCP) -> None:
 
     @mcp.tool(name="browser_evaluate", description="JavaScript を実行して結果を返す")
     async def browser_evaluate(expression: str) -> str:
-        await _ensure_connected()
+        if block := await _ensure_connected():
+            return block
         result = await cdp.send("Runtime.evaluate", {
             "expression": expression,
             "returnByValue": True,
@@ -251,18 +278,19 @@ def register_tools(mcp: FastMCP) -> None:
 
     @mcp.tool(name="browser_new_tab", description="新しいタブを開く。url を指定すればそのページを開く")
     async def browser_new_tab(url: str = "about:blank") -> str:
-        await _ensure_connected()
+        if block := await _ensure_connected():
+            return block
         result = await cdp.send("Target.createTarget", {"url": url})
         target_id = result.get("targetId", "")
         return json.dumps({"new_tab": target_id, "url": url}, ensure_ascii=False)
 
     @mcp.tool(name="browser_close_tab", description="現在のタブを閉じる")
     async def browser_close_tab() -> str:
-        await _ensure_connected()
+        if block := await _ensure_connected():
+            return block
         targets = await cdp.get_targets(port=_port)
         if not targets:
             return json.dumps({"error": "no tabs found"})
-        # 現在接続中のタブを閉じる（get_targets の先頭がアクティブタブ）
         target_id = targets[0].get("id", "")
         await cdp.send("Target.closeTarget", {"targetId": target_id})
         return json.dumps({"closed": target_id})
@@ -271,7 +299,8 @@ def register_tools(mcp: FastMCP) -> None:
 
     @mcp.tool(name="browser_select_option", description="<select> 要素の option を選択する。CSS セレクタと value を指定")
     async def browser_select_option(selector: str, value: str) -> str:
-        await _ensure_connected()
+        if block := await _ensure_connected():
+            return block
         js = f"""
             (() => {{
                 const el = document.querySelector({json.dumps(selector)});
@@ -289,7 +318,8 @@ def register_tools(mcp: FastMCP) -> None:
 
     @mcp.tool(name="browser_upload_file", description="ファイルをアップロードする。selector で <input type='file'> を指定し、file_path でローカルファイルパスを指定")
     async def browser_upload_file(selector: str, file_path: str) -> str:
-        await _ensure_connected()
+        if block := await _ensure_connected():
+            return block
         doc = await cdp.send("DOM.getDocument")
         root_id = doc["root"]["nodeId"]
         node = await cdp.send("DOM.querySelector", {
@@ -310,7 +340,8 @@ def register_tools(mcp: FastMCP) -> None:
 
     @mcp.tool(name="browser_wait", description="ページの読み込み完了を待つ。timeout_sec で最大待機秒数を指定（デフォルト 10）")
     async def browser_wait(timeout_sec: int = 10) -> str:
-        await _ensure_connected()
+        if block := await _ensure_connected():
+            return block
         try:
             result = await cdp.send("Runtime.evaluate", {
                 "expression": """
@@ -329,7 +360,8 @@ def register_tools(mcp: FastMCP) -> None:
 
     @mcp.tool(name="browser_wait_for_element", description="指定した CSS セレクタまたはテキストの要素が表示されるまで待つ。SPA やローディング待ちに使う")
     async def browser_wait_for_element(selector: str = "", text: str = "", timeout_sec: int = 10) -> str:
-        await _ensure_connected()
+        if block := await _ensure_connected():
+            return block
         if selector:
             js = f"""
                 new Promise((resolve, reject) => {{
@@ -377,6 +409,7 @@ def register_tools(mcp: FastMCP) -> None:
 
     @mcp.tool(name="browser_handle_dialog", description="ダイアログ（alert, confirm, 'Leave site?' 等）を処理する。accept=true で OK/Leave、false で Cancel")
     async def browser_handle_dialog(accept: bool = True) -> str:
-        await _ensure_connected()
+        await _ensure_connected(allow_dialog=True)
         await cdp.send("Page.handleJavaScriptDialog", {"accept": accept})
+        cdp.pending_dialog = None
         return json.dumps({"dialog": "accepted" if accept else "dismissed"})
