@@ -84,8 +84,9 @@ def _run_discord():
     workspace_dir = BASE_DIR / "platforms" / "discord" / "workspace"
     init_workspace(workspace_dir)
 
-    # workspace ディレクトリを作成
+    from core.engine import validate_engine_bin
     from core.config import WORKFLOW_DIR, MEMORY_DIR, ATTACHMENTS_DIR, TMP_DIR
+    validate_engine_bin()
     for d in [WORKFLOW_DIR, MEMORY_DIR, ATTACHMENTS_DIR, TMP_DIR]:
         d.mkdir(parents=True, exist_ok=True)
 
@@ -110,8 +111,9 @@ def _run_slack():
     workspace_dir = BASE_DIR / "platforms" / "slack" / "workspace"
     init_workspace(workspace_dir)
 
-    # workspace ディレクトリを作成
+    from core.engine import validate_engine_bin
     from core.config import WORKFLOW_DIR, MEMORY_DIR, ATTACHMENTS_DIR, TMP_DIR
+    validate_engine_bin()
     for d in [WORKFLOW_DIR, MEMORY_DIR, ATTACHMENTS_DIR, TMP_DIR]:
         d.mkdir(parents=True, exist_ok=True)
 
