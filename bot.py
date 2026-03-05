@@ -27,7 +27,10 @@ from core.config import (
 from core.claude import run_claude
 from core.embeds import make_error_embed, make_info_embed, split_message
 from core.attachments import process_attachment
-from browser.manager import BrowserManager
+from __future__ import annotations
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from browser.manager import BrowserManager
 
 # ─────────────────────────────────────────────
 # ログ設定
@@ -78,6 +81,7 @@ class ClaudeBot(commands.Bot):
 
         cfg = load_config()
         if cfg.get("browser_enabled", False):
+            from browser.manager import BrowserManager
             port = cfg.get("browser_cdp_port", 9222)
             novnc_bind = cfg.get("novnc_bind_address", "localhost")
             self.browser_manager = BrowserManager(cdp_port=port, novnc_bind=novnc_bind)
