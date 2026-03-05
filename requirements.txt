@@ -5,3 +5,4 @@ pdfminer.six>=20221105
 aiohttp>=3.9.0
 aiofiles>=23.0.0
 mcp>=1.0.0
+PyYAML>=6.0

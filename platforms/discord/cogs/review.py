@@ -6,56 +6,26 @@ from __future__ import annotations
 
 import re
 import uuid
-from pathlib import Path
 
 import discord
 from discord import app_commands
 from discord.ext import commands
 
+import core.config as _cfg
 from core.config import (
-    WORKFLOW_DIR,
     get_channel_session,
     save_channel_session,
 )
 from core.claude import run_claude
-from core.embeds import make_info_embed, make_error_embed, split_message
+from platforms.discord.embeds import make_info_embed, make_error_embed
+from core.message import split_message
+from core.memory import parse_pending_reviews, resolve_archive
 
-REVIEW_FILE = WORKFLOW_DIR / "REVIEW.md"
-CURIOSITY_DIR = WORKFLOW_DIR / "memory" / "curiosity"
+
+def _review_file():
+    """init_workspace() 後の WORKFLOW_DIR を反映して REVIEW.md のパスを返す。"""
+    return _cfg.WORKFLOW_DIR / "REVIEW.md"
 MAX_REVIEW_ITEMS = 3
-_ARCHIVE_PATH_RE = re.compile(r"`(memory/curiosity/[\w./-]+\.md)`")
-
-
-def _resolve_archive(relative: str) -> Path | None:
-    """REVIEW.md 記載の相対パスを実ファイルに解決する。"""
-    full = WORKFLOW_DIR / relative
-    if full.exists():
-        return full
-    # フォールバック: サブディレクトリを順に探す
-    fname = full.name
-    for sub in ("self", "tech", "business"):
-        candidate = CURIOSITY_DIR / sub / fname
-        if candidate.exists():
-            return candidate
-    return None
-
-
-def _parse_pending_reviews(text: str) -> list[dict]:
-    """REVIEW.md から未レビュー（[ ]）行を解析する。"""
-    items: list[dict] = []
-    for line in text.splitlines():
-        stripped = line.strip()
-        if not stripped.startswith("- [ ]"):
-            continue
-        # トピック名: "- [ ] " の後からアーカイブパス参照の前まで
-        topic_part = stripped.removeprefix("- [ ]").strip()
-        # " → `memory/..." の手前で切る
-        topic = re.split(r"\s*→\s*`", topic_part)[0].strip()
-        # アーカイブパス
-        path_m = _ARCHIVE_PATH_RE.search(stripped)
-        archive_rel = path_m.group(1) if path_m else None
-        items.append({"topic": topic, "archive_rel": archive_rel, "line": stripped})
-    return items
 
 
 class ReviewCog(commands.Cog):
@@ -64,15 +34,15 @@ class ReviewCog(commands.Cog):
 
     @app_commands.command(name="review", description="調査済みトピックをレビューする")
     async def review_command(self, interaction: discord.Interaction):
-        if not REVIEW_FILE.exists():
+        if not _review_file().exists():
             await interaction.response.send_message(
                 embed=make_info_embed("レビュー", "REVIEW.md が見つかりません。"),
                 ephemeral=True,
             )
             return
 
-        text = REVIEW_FILE.read_text(encoding="utf-8")
-        items = _parse_pending_reviews(text)
+        text = _review_file().read_text(encoding="utf-8")
+        items = parse_pending_reviews(text)
 
         if not items:
             await interaction.response.send_message(
@@ -89,7 +59,7 @@ class ReviewCog(commands.Cog):
             header = f"## {i}. {item['topic']}"
             content = ""
             if item["archive_rel"]:
-                path = _resolve_archive(item["archive_rel"])
+                path = resolve_archive(_cfg.WORKFLOW_DIR, item["archive_rel"])
                 if path:
                     content = path.read_text(encoding="utf-8")
                 else:

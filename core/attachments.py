@@ -9,7 +9,7 @@ from pathlib import Path
 import aiofiles
 import aiohttp
 
-from core.config import ATTACHMENTS_DIR, TMP_DIR
+import core.config as _cfg
 
 MAX_ATTACHMENT_SIZE = 10 * 1024 * 1024  # 10 MB
 
@@ -40,10 +40,10 @@ async def process_attachment(attachment) -> tuple[str | None, Path | None]:
         mb = attachment.size / (1024 * 1024)
         return f"\n\n（添付ファイル: {attachment.filename} — サイズ超過: {mb:.1f} MB、上限 10 MB）\n", None
 
-    ATTACHMENTS_DIR.mkdir(parents=True, exist_ok=True)
+    _cfg.ATTACHMENTS_DIR.mkdir(parents=True, exist_ok=True)
     # ファイル名衝突防止のため UUID プレフィックスを付与
     safe_name = f"{uuid.uuid4().hex[:8]}_{attachment.filename}"
-    save_path = ATTACHMENTS_DIR / safe_name
+    save_path = _cfg.ATTACHMENTS_DIR / safe_name
 
     async with aiohttp.ClientSession() as session:
         async with session.get(attachment.url) as resp:
@@ -61,8 +61,8 @@ async def process_attachment(attachment) -> tuple[str | None, Path | None]:
         elif ext in IMAGE_EXTENSIONS:
             # attachments/ に保存されたファイルを削除し、workspace/tmp/ に保存
             save_path.unlink(missing_ok=True)
-            TMP_DIR.mkdir(parents=True, exist_ok=True)
-            tmp_path = TMP_DIR / safe_name
+            _cfg.TMP_DIR.mkdir(parents=True, exist_ok=True)
+            tmp_path = _cfg.TMP_DIR / safe_name
             async with aiofiles.open(tmp_path, "wb") as f:
                 await f.write(data)
             abs_path = tmp_path.resolve()

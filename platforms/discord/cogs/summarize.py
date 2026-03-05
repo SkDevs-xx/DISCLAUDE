@@ -22,8 +22,9 @@ from discord import app_commands
 from discord.ext import commands
 
 from core.claude import run_claude
-from core.config import TMP_DIR
-from core.embeds import make_error_embed, make_info_embed
+import core.config as _cfg
+from core.message import split_message
+from platforms.discord.embeds import make_error_embed, make_info_embed
 
 logger = logging.getLogger("discord_bot")
 
@@ -107,7 +108,7 @@ class SummarizeCog(commands.Cog):
             tmp_fd, tmp_str = tempfile.mkstemp(
                 prefix=f"summarize_{interaction.channel_id}_",
                 suffix=".txt",
-                dir=TMP_DIR,
+                dir=_cfg.TMP_DIR,
             )
             tmp_path = Path(tmp_str)
 
@@ -245,7 +246,7 @@ class SummarizeCog(commands.Cog):
                 return
 
             display_summary = re.sub(r'\n{2,}', '\n', summary) if summary else ""
-            chunks = [display_summary[i:i+1900] for i in range(0, len(display_summary), 1900)] if display_summary else ["（応答なし）"]
+            chunks = split_message(display_summary, max_len=2000)
             for chunk in chunks:
                 await interaction.followup.send(content=chunk)
 

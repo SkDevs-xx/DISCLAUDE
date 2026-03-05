@@ -29,16 +29,20 @@ async def run_claude(
     session_id: str | None = None,
     is_new_session: bool = False,
     on_process: "Callable[[asyncio.subprocess.Process], None] | None" = None,
+    skill_instructions: str = "",
 ) -> tuple[str, bool]:
     """(response_text, timed_out) を返す。
 
     on_process: プロセス起動直後に呼ばれるコールバック。
     外部からプロセスを参照してキャンセルする用途に使う。
+    skill_instructions: スキルエンジンから注入される追加指示。
+    プロンプトの先頭に付加される。
     """
     if timeout is None:
         timeout = TIMEOUT_PLANNING if thinking else TIMEOUT_FAST
 
-    cmd = [CLAUDE_BIN, "-p", prompt, "--output-format", "text"]
+    full_prompt = f"{skill_instructions}\n\n{prompt}" if skill_instructions else prompt
+    cmd = [CLAUDE_BIN, "-p", full_prompt, "--output-format", "text"]
     if get_skip_permissions():
         cmd.append("--dangerously-skip-permissions")
     cmd += ["--model", model]
@@ -50,7 +54,7 @@ async def run_claude(
         else:
             cmd += ["--resume", session_id]
 
-    logger.info("claude: model=%s thinking=%s prompt_len=%d timeout=%ds", model, thinking, len(prompt), timeout)
+    logger.info("claude: model=%s thinking=%s prompt_len=%d timeout=%ds", model, thinking, len(full_prompt), timeout)
 
     proc: asyncio.subprocess.Process | None = None
     try:

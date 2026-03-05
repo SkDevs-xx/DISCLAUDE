@@ -1,10 +1,8 @@
 """
-Discord Embed 生成ヘルパー
+プラットフォーム非依存のテキストユーティリティ
 """
 
 import re
-
-import discord
 
 
 def split_message(text: str, max_len: int = 2000) -> list[str]:
@@ -72,10 +70,3 @@ def split_message(text: str, max_len: int = 2000) -> list[str]:
         chunks.append(chunk)
 
     return chunks
-
-
-def make_error_embed(msg: str) -> discord.Embed:
-    return discord.Embed(title="エラー", description=msg, color=discord.Color.red())
-
-def make_info_embed(title: str, desc: str) -> discord.Embed:
-    return discord.Embed(title=title, description=desc, color=discord.Color.green())

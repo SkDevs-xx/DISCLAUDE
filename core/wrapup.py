@@ -1,44 +1,64 @@
 """
 ラップアップ・メモリ圧縮
+プラットフォーム非依存 — メッセージ収集は callable で受け取る
 """
 
 import logging
+from collections.abc import Callable, Awaitable
 from datetime import datetime, timedelta
 from pathlib import Path
+from typing import NamedTuple
 from zoneinfo import ZoneInfo
 
-import discord
-
-from core.config import MEMORY_DIR
+import core.config as _cfg
 
 JST = ZoneInfo("Asia/Tokyo")
 logger = logging.getLogger("discord_bot")
 
-WRAPUP_DIR = MEMORY_DIR / "wrapup"
+
+def get_wrapup_dir() -> Path:
+    """MEMORY_DIR の現在値から wrapup ディレクトリを解決する。"""
+    return _cfg.MEMORY_DIR / "wrapup"
 
 
 def daily_wrapup_path(guild_id: int, target_date) -> Path:
     """新パス: memory/wrapup/{guild_id}/YYYY-MM-DD.md"""
-    return WRAPUP_DIR / str(guild_id) / f"{target_date.strftime('%Y-%m-%d')}.md"
+    return get_wrapup_dir() / str(guild_id) / f"{target_date.strftime('%Y-%m-%d')}.md"
 
 
-WRAPUP_CHAR_CAP = 800_000  # Discord 収集フェーズの文字数上限
+WRAPUP_CHAR_CAP = 800_000  # 収集フェーズの文字数上限
+
+
+class CollectedMessages(NamedTuple):
+    """メッセージ収集の結果。"""
+    parts: dict[str, list[str]]  # channel_name -> lines
+    total_chars: int
+    total_msgs: int
+    truncated: bool
+
+
+# collector の型: async (after_dt, before_dt) -> CollectedMessages
+MessageCollector = Callable[
+    [datetime, datetime],
+    Awaitable[CollectedMessages],
+]
 
 
 async def run_wrapup(
-    guild: discord.Guild,
+    guild_id: int,
+    guild_name: str,
+    collect_messages: MessageCollector,
+    format_hint: str = "",
     date_from: str | None = None,
     date_to: str | None = None,
     wrapup_time: str = "00:00",
 ) -> str | None:
     """
-    Discord API でサーバー全テキストチャンネルのメッセージを取得し、Claude で要約する。
-    date_from / date_to: "YYYY-MM-DD" 形式。両方 None なら前回 wrapup_time から今回 wrapup_time まで。
-    wrapup_time: "HH:MM" 形式。集計の区切り時刻。
+    メッセージを収集して Claude で要約する。
+    collect_messages: プラットフォーム固有のメッセージ収集関数
+    format_hint: 出力形式の指示（プラットフォーム固有）
     """
     from core.claude import run_claude
-
-    guild_id = guild.id
 
     # ── wrapup_time のパース ──
     wt_h, wt_m = (int(x) for x in wrapup_time.split(":"))
@@ -46,7 +66,6 @@ async def run_wrapup(
     # ── 日付範囲の決定 ──
     now = datetime.now(JST)
     if date_from is None and date_to is None:
-        # 前日の wrapup_time 〜 本日の wrapup_time
         end_dt = now.replace(hour=wt_h, minute=wt_m, second=0, microsecond=0)
         start_dt = end_dt - timedelta(days=1)
         d_from = start_dt.date()
@@ -62,39 +81,15 @@ async def run_wrapup(
     after_dt = start_dt - timedelta(seconds=1)
     before_dt = end_dt
 
-    # ── 全テキストチャンネルからメッセージを収集 ──
-    parts: dict[str, list[str]] = {}  # channel_name -> lines
-    total_chars = 0
-    total_msgs = 0
-    truncated = False
+    # ── メッセージ収集（プラットフォーム固有の collector を呼ぶ） ──
+    result = await collect_messages(after_dt, before_dt)
 
-    for text_ch in guild.text_channels:
-        if truncated:
-            break
-        ch_label = text_ch.name
-        try:
-            async for msg in text_ch.history(after=after_dt, before=before_dt, oldest_first=True):
-                if not msg.content:
-                    continue
-                ts = msg.created_at.astimezone(JST).strftime("%Y-%m-%d %H:%M")
-                line = f"[{ts}] {msg.author.display_name}: {msg.content}"
-                total_chars += len(line) + 1
-                total_msgs += 1
-                parts.setdefault(ch_label, []).append(line)
-                if total_chars >= WRAPUP_CHAR_CAP:
-                    truncated = True
-                    break
-        except discord.Forbidden:
-            logger.debug("wrapup: no permission for #%s (%d)", text_ch.name, text_ch.id)
-        except Exception as e:
-            logger.warning("wrapup: error fetching #%s: %s", text_ch.name, e)
-
-    if not parts:
+    if not result.parts:
         return None
 
     # ── チャンネル別にテキストを組み立て ──
     history_lines = []
-    for ch_name, lines in parts.items():
+    for ch_name, lines in result.parts.items():
         history_lines.append(f"### #{ch_name}")
         history_lines.extend(lines)
         history_lines.append("")
@@ -106,27 +101,24 @@ async def run_wrapup(
         date_label += f" 〜 {d_to.strftime('%Y-%m-%d')}"
 
     logger.info("wrapup: guild=%d period=%s msgs=%d chars=%d truncated=%s",
-                guild_id, date_label, total_msgs, total_chars, truncated)
+                guild_id, date_label, result.total_msgs, result.total_chars, result.truncated)
 
     # ── Claude に要約を依頼 ──
     prompt = (
-        f"{date_label} のサーバー「{guild.name}」全チャンネルの会話ログ（{total_msgs}件）です。\n"
-        "この期間に話したこと・決めたこと・進んだこと・残ったタスクをチャンネルをまたいで簡潔にまとめてください。\n\n"
-        "【出力形式の注意（厳守）】Discord に直接表示するため、以下のルールに従ってください：\n"
-        "- 見出しは # / ## / ### のみ使用（#### 以下は禁止）\n"
-        "- テーブル（| 区切り）は禁止。箇条書き（- ）で代替する\n"
-        "- 水平線（--- や ***）は禁止\n"
-        "- コードは ``` で囲む\n\n"
-        + history_text
+        f"{date_label} のサーバー「{guild_name}」全チャンネルの会話ログ（{result.total_msgs}件）です。\n"
+        "この期間に話したこと・決めたこと・進んだこと・残ったタスクをチャンネルをまたいで簡潔にまとめてください。\n"
     )
+    if format_hint:
+        prompt += "\n" + format_hint + "\n"
+    prompt += "\n" + history_text
 
     summary, timed_out = await run_claude(prompt)
 
     if timed_out or not summary or summary.startswith("エラーが発生しました"):
         return None
 
-    # ── 新パス: memory/wrapup/{guild_id}/YYYY-MM-DD.md に保存 ──
-    guild_dir = WRAPUP_DIR / str(guild_id)
+    # ── 保存 ──
+    guild_dir = get_wrapup_dir() / str(guild_id)
     guild_dir.mkdir(parents=True, exist_ok=True)
     wp_file = daily_wrapup_path(guild_id, d_from)
     wp_file.write_text(f"# {date_label}\n\n{summary}\n", encoding="utf-8")

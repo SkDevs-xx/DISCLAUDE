@@ -7,11 +7,11 @@ from discord import app_commands
 from discord.ext import commands
 
 from core.config import (
-    load_config, save_config,
+    load_platform_config, save_platform_config,
     get_model_config,
     get_no_mention_channels, set_no_mention,
 )
-from core.embeds import make_info_embed
+from platforms.discord.embeds import make_info_embed
 
 
 MODEL_CHOICES = [
@@ -59,9 +59,9 @@ class ModelView(discord.ui.View):
         self.current_model = interaction.data["values"][0]
         for opt in self.model_select.options:
             opt.default = (opt.value == self.current_model)
-        cfg = load_config()
+        cfg = load_platform_config()
         cfg["model"] = self.current_model
-        save_config(cfg)
+        save_platform_config(cfg)
         await interaction.response.edit_message(
             embed=self.make_embed(self.current_model, self.current_thinking), view=self
         )
@@ -70,9 +70,9 @@ class ModelView(discord.ui.View):
     async def thinking_on_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
         self.current_thinking = True
         self._update_buttons(True)
-        cfg = load_config()
+        cfg = load_platform_config()
         cfg["thinking"] = True
-        save_config(cfg)
+        save_platform_config(cfg)
         await interaction.response.edit_message(
             embed=self.make_embed(self.current_model, True), view=self
         )
@@ -81,9 +81,9 @@ class ModelView(discord.ui.View):
     async def thinking_off_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
         self.current_thinking = False
         self._update_buttons(False)
-        cfg = load_config()
+        cfg = load_platform_config()
         cfg["thinking"] = False
-        save_config(cfg)
+        save_platform_config(cfg)
         await interaction.response.edit_message(
             embed=self.make_embed(self.current_model, False), view=self
         )

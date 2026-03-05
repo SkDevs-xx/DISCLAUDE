@@ -1,0 +1,34 @@
+{
+  "novnc_bind_address": "server address or tailscale address",
+  "discord": {
+    "enabled": false,
+    "model": "sonnet",
+    "thinking": false,
+    "skip_permissions": true,
+    "browser_enabled": false,
+    "browser_cdp_port": 9222,
+    "allowed_user_ids": [
+      "YOUR_DISCORD_USER_ID"
+    ],
+    "heartbeat_enabled": false,
+    "heartbeat_channel_id": "YOUR_HEARTBEAT_CHANNEL_ID",
+    "heartbeat_interval_minutes": 60,
+    "no_mention_channels": []
+  },
+  "slack": {
+    "enabled": false,
+    "model": "sonnet",
+    "thinking": false,
+    "skip_permissions": true,
+    "browser_enabled": false,
+    "browser_cdp_port": 9221
+  },
+  "notion": {
+    "enabled": false,
+    "model": "sonnet",
+    "thinking": false,
+    "skip_permissions": true,
+    "browser_enabled": false,
+    "browser_cdp_port": 9220
+  }
+}

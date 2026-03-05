@@ -5,46 +5,38 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import os
 import re
 import uuid
 from pathlib import Path
 from datetime import datetime, timezone
-from logging.handlers import RotatingFileHandler
 from typing import TYPE_CHECKING
 
 import discord
 from discord import app_commands
 from discord.ext import commands
-from dotenv import load_dotenv
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 
+import core.config as _cfg
 from core.config import (
-    BASE_DIR, LOG_FILE,
-    WORKFLOW_DIR, MEMORY_DIR, ATTACHMENTS_DIR, TMP_DIR,
-    load_config, load_schedules, save_schedules, save_channel_name,
+    BASE_DIR, load_config, load_platform_config,
+    load_schedules, save_schedules, save_channel_name,
     get_channel_session, save_channel_session,
+    get_no_mention_channels, get_model_config,
 )
 from core.claude import run_claude
-from core.embeds import make_error_embed, make_info_embed, split_message
+from core.message import split_message
 from core.attachments import process_attachment
+from core.skills import SkillRegistry
+from platforms.base import PlatformContext
+from platforms.discord import DISCORD_FORMAT_HINT
+from platforms.discord.embeds import make_error_embed, make_info_embed
 
 if TYPE_CHECKING:
     from browser.manager import BrowserManager
 
-# ─────────────────────────────────────────────
-# ログ設定
-# ─────────────────────────────────────────────
 logger = logging.getLogger("discord_bot")
-logger.setLevel(logging.INFO)
-_fh = RotatingFileHandler(LOG_FILE, maxBytes=10 * 1024 * 1024, backupCount=3, encoding="utf-8")
-_fh.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(message)s"))
-_sh = logging.StreamHandler()
-_sh.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(message)s"))
-logger.addHandler(_fh)
-logger.addHandler(_sh)
 
 
 # ─────────────────────────────────────────────
@@ -60,6 +52,14 @@ class ClaudeBot(commands.Bot):
         self.running_processes: dict[int, asyncio.subprocess.Process] = {}  # channel_id -> Claude Process
         self.scheduler = AsyncIOScheduler(timezone="Asia/Tokyo")
         self.browser_manager: BrowserManager | None = None
+        self.platform_context = PlatformContext(
+            name="discord",
+            workspace_dir=_cfg.WORKFLOW_DIR,
+            capabilities=frozenset({"embed", "reaction", "thread", "slash_command"}),
+            format_hint=DISCORD_FORMAT_HINT,
+        )
+        self.skill_registry = SkillRegistry()
+        self.skill_registry.scan_directory(BASE_DIR / "skills")
 
     def get_channel_lock(self, channel_id: int) -> asyncio.Lock:
         if channel_id not in self.channel_locks:
@@ -68,11 +68,11 @@ class ClaudeBot(commands.Bot):
 
     async def setup_hook(self):
         for ext in [
-            "cogs.utility",
-            "cogs.schedule",
-            "cogs.summarize",
-            "cogs.heartbeat",
-            "cogs.review",
+            "platforms.discord.cogs.utility",
+            "platforms.discord.cogs.schedule",
+            "platforms.discord.cogs.summarize",
+            "platforms.discord.cogs.heartbeat",
+            "platforms.discord.cogs.review",
         ]:
             await self.load_extension(ext)
         await self.tree.sync()
@@ -81,11 +81,11 @@ class ClaudeBot(commands.Bot):
         self._reload_schedules()
         self.scheduler.start()
 
-        cfg = load_config()
-        if cfg.get("browser_enabled", False):
+        platform_cfg = load_platform_config()
+        if platform_cfg.get("browser_enabled", False):
             from browser.manager import BrowserManager
-            port = cfg.get("browser_cdp_port", 9222)
-            novnc_bind = cfg.get("novnc_bind_address", "localhost")
+            port = platform_cfg.get("browser_cdp_port", 9222)
+            novnc_bind = load_config().get("novnc_bind_address", "localhost")
             self.browser_manager = BrowserManager(cdp_port=port, novnc_bind=novnc_bind)
             await self.browser_manager.start()
 
@@ -120,6 +120,7 @@ class ClaudeBot(commands.Bot):
         try:
             if s.get("type") == "wrapup":
                 from core.wrapup import run_wrapup
+                from platforms.discord.utils import make_discord_collector
                 # cron から時刻を取得（例: "0 5 * * *" → "05:00"）
                 cron_parts = s.get("cron", "0 5 * * *").split()
                 sched_time = f"{int(cron_parts[1]):02d}:{int(cron_parts[0]):02d}"
@@ -127,7 +128,13 @@ class ClaudeBot(commands.Bot):
                 if guild is None:
                     logger.warning("Schedule wrapup: guild not found for channel %d", channel_id)
                     return
-                summary = await run_wrapup(guild, wrapup_time=sched_time)
+                summary = await run_wrapup(
+                    guild_id=guild.id,
+                    guild_name=guild.name,
+                    collect_messages=make_discord_collector(guild),
+                    format_hint=DISCORD_FORMAT_HINT,
+                    wrapup_time=sched_time,
+                )
                 if summary is None:
                     await channel.send(embed=make_info_embed("ラップアップ", "該当する会話履歴がありませんでした。"))
                 else:
@@ -137,15 +144,11 @@ class ClaudeBot(commands.Bot):
                 # 後方互換: 旧 "mode" キーを model+thinking に変換
                 sched_model = s.get("model", "sonnet")
                 sched_thinking = s.get("thinking", s.get("mode") == "planning")
-                discord_format_hint = (
-                    "\n\n【出力形式の注意（厳守）】Discord に直接表示するため、以下のルールに従ってください：\n"
-                    "- 見出しは # / ## / ### のみ使用（#### 以下は禁止）\n"
-                    "- テーブル（| 区切り）は禁止。箇条書き（- ）で代替する\n"
-                    "- 水平線（--- や ***）は禁止\n"
-                    "- コードは ``` で囲む"
-                )
                 async with self.get_channel_lock(channel_id):
-                    response, timed_out = await run_claude(s["prompt"] + discord_format_hint, model=sched_model, thinking=sched_thinking)
+                    response, timed_out = await run_claude(
+                        s["prompt"] + "\n\n" + DISCORD_FORMAT_HINT,
+                        model=sched_model, thinking=sched_thinking,
+                    )
 
                 if timed_out:
                     await channel.send(embed=make_error_embed("スケジュールタスクがタイムアウトしました。"))
@@ -182,8 +185,7 @@ class ClaudeBot(commands.Bot):
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         """全スラッシュコマンドに allowed_user_ids チェックを適用する。"""
-        cfg = load_config()
-        allowed = cfg.get("allowed_user_ids", [])
+        allowed = load_platform_config().get("allowed_user_ids", [])
         if str(interaction.user.id) not in allowed:
             await interaction.response.send_message("権限がありません。", ephemeral=True)
             return False
@@ -209,12 +211,12 @@ class ClaudeBot(commands.Bot):
             logger.info("[on_message] skipped: channel type %s", type(message.channel).__name__)
             return
 
-        cfg = load_config()
-        no_mention = set(cfg.get("no_mention_channels", []))
+        platform_cfg = load_platform_config()
+        no_mention = get_no_mention_channels()
         if self.user not in message.mentions and str(message.channel.id) not in no_mention:
             return
 
-        allowed = cfg.get("allowed_user_ids", [])
+        allowed = platform_cfg.get("allowed_user_ids", [])
         if str(message.author.id) not in allowed:
             logger.info("[on_message] skipped: user %s not in allowlist %s", message.author.id, allowed)
             return
@@ -262,13 +264,21 @@ class ClaudeBot(commands.Bot):
                     task = asyncio.current_task()
                     self.running_tasks[channel_id] = task
 
-                    model = cfg.get("model", "sonnet")
-                    thinking = cfg.get("thinking", False)
+                    model, thinking = get_model_config()
+                    registry_instr = self.skill_registry.build_instructions(
+                        self.platform_context.name,
+                        disabled=self.platform_context.disabled_skills,
+                    )
+                    skill_instr = (
+                        f"[platform: {self.platform_context.name}]\n"
+                        + (f"\n{registry_instr}" if registry_instr else "")
+                    )
                     response, timed_out = await run_claude(
                         full_prompt, model=model, thinking=thinking,
                         session_id=session_id,
                         is_new_session=is_new,
                         on_process=lambda p: self.running_processes.__setitem__(channel_id, p),
+                        skill_instructions=skill_instr,
                     )
 
                     self.running_tasks.pop(channel_id, None)
@@ -300,24 +310,3 @@ class ClaudeBot(commands.Bot):
             await interaction.response.send_message(
                 embed=make_error_embed(f"コマンドエラー: {error}"), ephemeral=True
             )
-
-
-# ─────────────────────────────────────────────
-# エントリポイント
-# ─────────────────────────────────────────────
-def main():
-    load_dotenv(BASE_DIR / ".env")
-    token = os.getenv("DISCORD_BOT_TOKEN")
-    if not token or token == "your_token_here":
-        logger.error(".env に DISCORD_BOT_TOKEN が設定されていません。")
-        return
-
-    for d in [WORKFLOW_DIR, MEMORY_DIR, ATTACHMENTS_DIR, TMP_DIR]:
-        d.mkdir(parents=True, exist_ok=True)
-
-    bot = ClaudeBot()
-    bot.run(token, log_handler=None)
-
-
-if __name__ == "__main__":
-    main()

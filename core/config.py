@@ -19,12 +19,31 @@ SCHEDULES_FILE = WORKFLOW_DIR / "schedules" / "schedules.json"
 ATTACHMENTS_DIR = WORKFLOW_DIR / "temp"
 TMP_DIR = WORKFLOW_DIR / "temp"
 CONFIG_FILE = BASE_DIR / "config.json"
+PLATFORM_NAME: str = ""                         # "discord" | "slack" | "notion"
 SOUL_FILE = WORKFLOW_DIR / "SOUL.md"
 USER_FILE = WORKFLOW_DIR / "USER.md"
 CHANNEL_NAMES_FILE = WORKFLOW_DIR / "channel_names.json"
 SESSIONS_FILE = WORKFLOW_DIR / "sessions.json"
 CLAUDE_MD_FILE = BASE_DIR / "CLAUDE.md"
 LOG_FILE = BASE_DIR / "bot.log"
+
+def init_workspace(workspace_dir: Path) -> None:
+    """起動時にプラットフォーム固有の workspace パスを設定する。"""
+    global WORKFLOW_DIR, MEMORY_DIR, SCHEDULES_FILE, ATTACHMENTS_DIR, TMP_DIR
+    global CHANNEL_NAMES_FILE, SESSIONS_FILE, SOUL_FILE, USER_FILE
+    global PLATFORM_NAME
+    WORKFLOW_DIR = workspace_dir
+    MEMORY_DIR = WORKFLOW_DIR / "memory"
+    SCHEDULES_FILE = WORKFLOW_DIR / "schedules" / "schedules.json"
+    ATTACHMENTS_DIR = WORKFLOW_DIR / "temp"
+    TMP_DIR = WORKFLOW_DIR / "temp"
+    CHANNEL_NAMES_FILE = WORKFLOW_DIR / "channel_names.json"
+    SESSIONS_FILE = WORKFLOW_DIR / "sessions.json"
+    SOUL_FILE = WORKFLOW_DIR / "SOUL.md"
+    USER_FILE = WORKFLOW_DIR / "USER.md"
+    # platforms/{name}/workspace/ の親ディレクトリ名がプラットフォーム名
+    PLATFORM_NAME = workspace_dir.parent.name
+
 
 CLAUDE_BIN = shutil.which("claude") or str(Path.home() / ".local" / "bin" / "claude")
 TIMEOUT_FAST = 180
@@ -74,13 +93,32 @@ def load_config() -> dict:
     return _config_cache
 
 def get_skip_permissions() -> bool:
-    return load_config().get("skip_permissions", True)
+    return load_platform_config().get("skip_permissions", True)
 
 def save_config(cfg: dict) -> None:
     global _config_cache, _config_mtime
     _atomic_write_json(CONFIG_FILE, cfg)
     _config_cache = cfg
     _config_mtime = os.path.getmtime(CONFIG_FILE)
+
+
+# ─────────────────────────────────────────────
+# プラットフォーム固有設定（config.json の platforms セクション）
+# ─────────────────────────────────────────────
+
+def load_platform_config() -> dict:
+    """プラットフォーム固有設定を返す。init_workspace() 前は空 dict。"""
+    if not PLATFORM_NAME:
+        return {}
+    return load_config().get(PLATFORM_NAME, {})
+
+def save_platform_config(cfg: dict) -> None:
+    if not PLATFORM_NAME:
+        logger.error("save_platform_config: PLATFORM_NAME is not set")
+        return
+    full_cfg = load_config()
+    full_cfg[PLATFORM_NAME] = cfg
+    save_config(full_cfg)
 
 def load_schedules() -> list:
     if not SCHEDULES_FILE.exists():
@@ -127,15 +165,15 @@ def get_channel_session(channel_id: int) -> str | None:
 
 def get_model_config() -> tuple[str, bool]:
     """(model, thinking) を返す。"""
-    cfg = load_config()
+    cfg = load_platform_config()
     return cfg.get("model", "sonnet"), cfg.get("thinking", False)
 
 def get_no_mention_channels() -> set[str]:
-    return set(load_config().get("no_mention_channels", []))
+    return set(load_platform_config().get("no_mention_channels", []))
 
 def set_no_mention(channel_id: int, enabled: bool) -> None:
     """enabled=True でメンション不要、False で必要に設定。"""
-    cfg = load_config()
+    cfg = load_platform_config()
     channels = list(cfg.get("no_mention_channels", []))
     cid = str(channel_id)
     if enabled and cid not in channels:
@@ -143,7 +181,7 @@ def set_no_mention(channel_id: int, enabled: bool) -> None:
     elif not enabled and cid in channels:
         channels.remove(cid)
     cfg["no_mention_channels"] = channels
-    save_config(cfg)
+    save_platform_config(cfg)
 
 def save_channel_session(channel_id: int, session_id: str) -> None:
     data: dict = {}

@@ -15,8 +15,9 @@ from apscheduler.triggers.cron import CronTrigger
 from core.config import (
     get_channel_name, load_schedules, save_schedules,
 )
-from core.discord_utils import get_guild_channels
-from core.embeds import make_error_embed, make_info_embed
+from platforms.discord.utils import get_guild_channels
+from platforms.discord.embeds import make_error_embed, make_info_embed
+from core.scheduler import infer_freq_from_cron
 
 logger = logging.getLogger("discord_bot")
 
@@ -68,22 +69,6 @@ def _parse_cron(freq: str, values: dict) -> str | None:
         return None
 
 
-def _infer_freq_from_cron(cron: str) -> str | None:
-    parts = cron.strip().split()
-    if len(parts) != 5:
-        return None
-    m, h, dom, mon, dow = parts
-    if m.startswith("*/"):
-        return "interval"
-    if h == "*" and dom == "*" and mon == "*" and dow == "*":
-        return "hourly"
-    if dom == "*" and mon == "*" and dow == "MON-FRI":
-        return "weekday"
-    if dom == "*" and mon == "*" and dow == "*":
-        return "daily"
-    if dom == "*" and mon == "*":
-        return "weekly"
-    return None
 
 
 def _cron_to_fields(cron: str, freq: str) -> dict:
@@ -324,7 +309,7 @@ class ScheduleEditSetupView(discord.ui.View):
         self.schedule = schedule
         self.selected_channel_id = int(schedule["channel_id"])
         self.selected_channel_name = get_channel_name(self.selected_channel_id)
-        self.selected_freq = _infer_freq_from_cron(schedule["cron"]) or "daily"
+        self.selected_freq = infer_freq_from_cron(schedule["cron"]) or "daily"
         # 後方互換: 旧 "mode" キーから変換
         self.selected_model = schedule.get("model", "sonnet")
         self.selected_thinking = schedule.get("thinking", schedule.get("mode") == "planning")
@@ -411,7 +396,7 @@ class ScheduleEditSetupView(discord.ui.View):
         await interaction.response.edit_message(embed=self.make_embed(), view=self)
 
     async def _on_next(self, interaction: discord.Interaction):
-        current_freq = _infer_freq_from_cron(self.schedule["cron"])
+        current_freq = infer_freq_from_cron(self.schedule["cron"])
         fields = _cron_to_fields(self.schedule["cron"], self.selected_freq) if current_freq == self.selected_freq else {}
         await interaction.response.send_modal(
             ScheduleEditModal(self.bot, self.schedule, self.selected_channel_id, self.selected_freq, fields, self.selected_model, self.selected_thinking)

@@ -1,12 +1,12 @@
 {
   "mcpServers": {
     "disclaude-browser": {
-      "command": "/home/disclaude/venv/bin/python",
+      "command": "/home/{appsUSER}/venv/bin/python",
       "args": [
         "-m",
         "browser"
       ],
-      "cwd": "/home/disclaude"
+      "cwd": "/home/{appsUSER}"
     }
   }
 }

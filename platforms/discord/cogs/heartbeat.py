@@ -17,92 +17,37 @@ from discord.ext import commands
 from apscheduler.triggers.interval import IntervalTrigger
 from apscheduler.triggers.cron import CronTrigger
 
-from core.config import WORKFLOW_DIR, load_config, save_config
+import core.config as _cfg
+from core.config import load_platform_config, save_platform_config
 from core.claude import run_claude
-from core.discord_utils import get_guild_channels
-from core.embeds import make_error_embed, make_info_embed, split_message
+from platforms.discord.utils import get_guild_channels
+from platforms.discord.embeds import make_error_embed, make_info_embed
+from core.message import split_message
+from core.memory import (
+    parse_heartbeat_state,
+    update_heartbeat_state,
+    get_checklist_section,
+    update_checklist_section,
+    should_run_wrapup,
+)
 
 JST = ZoneInfo("Asia/Tokyo")
-HEARTBEAT_FILE = WORKFLOW_DIR / "HEARTBEAT.md"
 logger = logging.getLogger("discord_bot")
+
+
+def _heartbeat_file():
+    """init_workspace() 後の WORKFLOW_DIR を反映して HEARTBEAT.md のパスを返す。"""
+    return _cfg.WORKFLOW_DIR / "HEARTBEAT.md"
+
+
+def _read_heartbeat_text() -> str:
+    """HEARTBEAT.md の内容を返す。存在しなければ空文字列。"""
+    hb = _heartbeat_file()
+    return hb.read_text(encoding="utf-8") if hb.exists() else ""
 
 # 重複抑制: {message_hash: last_sent_datetime}
 _sent_warnings: dict[str, datetime] = {}
 SUPPRESS_HOURS = 24
-
-
-# ─────────────────────────────────────────────
-# HEARTBEAT.md State パーサー / ライター
-# ─────────────────────────────────────────────
-def _parse_heartbeat_state(text: str) -> dict:
-    """## State セクションの key-value をパースする。"""
-    state = {
-        "last_updated": None,
-        "wrapup_done": False,
-        "wrapup_time": "05:00",
-        "last_wrapup_compressed": None,
-        "last_weekly_compressed": None,
-    }
-    m = re.search(r"wrapup_done:\s*(true|false)", text, re.IGNORECASE)
-    if m:
-        state["wrapup_done"] = m.group(1).lower() == "true"
-    m = re.search(r'wrapup_time:\s*["\']?(\d{2}:\d{2})["\']?', text)
-    if m:
-        state["wrapup_time"] = m.group(1)
-    m = re.search(r"last_updated:\s*(\d{4}-\d{2}-\d{2})", text)
-    if m:
-        state["last_updated"] = m.group(1)
-    m = re.search(r"last_wrapup_compressed:\s*(\d{4}-\d{2}-\d{2})", text)
-    if m:
-        state["last_wrapup_compressed"] = m.group(1)
-    m = re.search(r"last_weekly_compressed:\s*(\d{4}-\d{2}-\d{2})", text)
-    if m:
-        state["last_weekly_compressed"] = m.group(1)
-    return state
-
-
-def _update_heartbeat_state(key: str, value: str) -> None:
-    """HEARTBEAT.md 内の指定キーの値を書き換える。"""
-    if not HEARTBEAT_FILE.exists():
-        return
-    text = HEARTBEAT_FILE.read_text(encoding="utf-8")
-    pattern = rf"({re.escape(key)}:\s*).*"
-    new_text = re.sub(pattern, rf"\g<1>{value}", text)
-    HEARTBEAT_FILE.write_text(new_text, encoding="utf-8")
-
-
-def _get_checklist_section(text: str) -> str:
-    """「## 毎回チェック」セクションの内容を抽出する。"""
-    m = re.search(r"## 毎回チェック\n(.*?)(?=\n## |\Z)", text, re.DOTALL)
-    return m.group(1).strip() if m else ""
-
-
-def _update_checklist_section(new_content: str) -> None:
-    """HEARTBEAT.md の「## 毎回チェック」セクションを書き換える。"""
-    if not HEARTBEAT_FILE.exists():
-        return
-    text = HEARTBEAT_FILE.read_text(encoding="utf-8")
-    new_text = re.sub(
-        r"(## 毎回チェック\n).*?(?=\n## |\Z)",
-        rf"\g<1>{new_content}\n",
-        text,
-        flags=re.DOTALL,
-    )
-    HEARTBEAT_FILE.write_text(new_text, encoding="utf-8")
-
-
-def _should_run_wrapup(state: dict) -> bool:
-    """wrapup_done == false かつ現在時刻 >= wrapup_time なら True。"""
-    if state.get("wrapup_done"):
-        return False
-    wrapup_time_str = state.get("wrapup_time", "05:00")
-    now = datetime.now(JST)
-    try:
-        h, m = wrapup_time_str.split(":")
-        wrapup_dt = now.replace(hour=int(h), minute=int(m), second=0, microsecond=0)
-        return now >= wrapup_dt
-    except (ValueError, AttributeError):
-        return False
 
 
 def _build_status_embed(state: dict, cfg: dict) -> discord.Embed:
@@ -146,11 +91,11 @@ class HeartbeatSettingsModal(discord.ui.Modal, title="Heartbeat 詳細設定"):
             max_length=4,
             required=False,
         )
-        hb_text = HEARTBEAT_FILE.read_text(encoding="utf-8") if HEARTBEAT_FILE.exists() else ""
+        hb_text = _read_heartbeat_text()
         self.checklist_input = discord.ui.TextInput(
             label="毎回チェック",
             style=discord.TextStyle.paragraph,
-            default=_get_checklist_section(hb_text),
+            default=get_checklist_section(hb_text),
             max_length=4000,
             required=False,
         )
@@ -171,7 +116,7 @@ class HeartbeatSettingsModal(discord.ui.Modal, title="Heartbeat 詳細設定"):
                     h, m = new_time.split(":")
                     if not (0 <= int(h) <= 23 and 0 <= int(m) <= 59):
                         raise ValueError
-                    _update_heartbeat_state("wrapup_time", f'"{new_time}"')
+                    update_heartbeat_state(_heartbeat_file(),"wrapup_time", f'"{new_time}"')
                 except ValueError:
                     errors.append("Wrapup 時刻が不正です。")
 
@@ -182,9 +127,9 @@ class HeartbeatSettingsModal(discord.ui.Modal, title="Heartbeat 詳細設定"):
                 minutes = int(new_interval)
                 if minutes < 1:
                     raise ValueError
-                cfg = load_config()
+                cfg = load_platform_config()
                 cfg["heartbeat_interval_minutes"] = minutes
-                save_config(cfg)
+                save_platform_config(cfg)
                 self.bot.scheduler.add_job(
                     self.bot.get_cog("HeartbeatCog")._run_heartbeat,
                     IntervalTrigger(minutes=minutes),
@@ -197,7 +142,7 @@ class HeartbeatSettingsModal(discord.ui.Modal, title="Heartbeat 詳細設定"):
         # 毎回チェック
         new_checklist = self.checklist_input.value.strip()
         if new_checklist is not None:
-            _update_checklist_section(new_checklist)
+            update_checklist_section(_heartbeat_file(),new_checklist)
 
         if errors:
             await interaction.response.send_message(
@@ -206,9 +151,9 @@ class HeartbeatSettingsModal(discord.ui.Modal, title="Heartbeat 詳細設定"):
             return
 
         # 更新後のステータスを表示
-        text = HEARTBEAT_FILE.read_text(encoding="utf-8") if HEARTBEAT_FILE.exists() else ""
-        state = _parse_heartbeat_state(text)
-        cfg = load_config()
+        text = _read_heartbeat_text()
+        state = parse_heartbeat_state(text)
+        cfg = load_platform_config()
         guild = interaction.guild
         channels = get_guild_channels(guild) if guild else []
         await interaction.response.edit_message(
@@ -227,7 +172,7 @@ class HeartbeatView(discord.ui.View):
         super().__init__(timeout=120)
         self.bot = bot
         if cfg is None:
-            cfg = load_config()
+            cfg = load_platform_config()
         self._enabled = cfg.get("heartbeat_enabled", True)
 
         # チャンネル Select（row 0）
@@ -252,13 +197,13 @@ class HeartbeatView(discord.ui.View):
 
     async def _on_channel_select(self, interaction: discord.Interaction):
         selected = interaction.data["values"][0]
-        cfg = load_config()
+        cfg = load_platform_config()
         cfg["heartbeat_channel_id"] = selected
-        save_config(cfg)
+        save_platform_config(cfg)
         # Embed を更新
-        text = HEARTBEAT_FILE.read_text(encoding="utf-8") if HEARTBEAT_FILE.exists() else ""
-        state = _parse_heartbeat_state(text)
-        cfg = load_config()
+        text = _read_heartbeat_text()
+        state = parse_heartbeat_state(text)
+        cfg = load_platform_config()
         for opt in self.ch_select.options:
             opt.default = (opt.value == selected)
         await interaction.response.edit_message(embed=_build_status_embed(state, cfg), view=self)
@@ -273,33 +218,33 @@ class HeartbeatView(discord.ui.View):
 
     @discord.ui.button(label="詳細設定", style=discord.ButtonStyle.secondary, row=1)
     async def detail_settings(self, interaction: discord.Interaction, button: discord.ui.Button):
-        text = HEARTBEAT_FILE.read_text(encoding="utf-8") if HEARTBEAT_FILE.exists() else ""
-        state = _parse_heartbeat_state(text)
-        cfg = load_config()
+        text = _read_heartbeat_text()
+        state = parse_heartbeat_state(text)
+        cfg = load_platform_config()
         await interaction.response.send_modal(HeartbeatSettingsModal(self.bot, state, cfg))
 
     @discord.ui.button(label="Heartbeat ON", row=2)
     async def hb_on_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
         self._enabled = True
         self._update_toggle_buttons(True)
-        cfg = load_config()
+        cfg = load_platform_config()
         cfg["heartbeat_enabled"] = True
-        save_config(cfg)
-        text = HEARTBEAT_FILE.read_text(encoding="utf-8") if HEARTBEAT_FILE.exists() else ""
-        state = _parse_heartbeat_state(text)
-        cfg = load_config()
+        save_platform_config(cfg)
+        text = _read_heartbeat_text()
+        state = parse_heartbeat_state(text)
+        cfg = load_platform_config()
         await interaction.response.edit_message(embed=_build_status_embed(state, cfg), view=self)
 
     @discord.ui.button(label="Heartbeat OFF", row=2)
     async def hb_off_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
         self._enabled = False
         self._update_toggle_buttons(False)
-        cfg = load_config()
+        cfg = load_platform_config()
         cfg["heartbeat_enabled"] = False
-        save_config(cfg)
-        text = HEARTBEAT_FILE.read_text(encoding="utf-8") if HEARTBEAT_FILE.exists() else ""
-        state = _parse_heartbeat_state(text)
-        cfg = load_config()
+        save_platform_config(cfg)
+        text = _read_heartbeat_text()
+        state = parse_heartbeat_state(text)
+        cfg = load_platform_config()
         await interaction.response.edit_message(embed=_build_status_embed(state, cfg), view=self)
 
 
@@ -312,7 +257,7 @@ class HeartbeatCog(commands.Cog):
 
     async def cog_load(self):
         """APScheduler にジョブを登録する。"""
-        cfg = load_config()
+        cfg = load_platform_config()
         interval = cfg.get("heartbeat_interval_minutes", 30)
         self.bot.scheduler.add_job(
             self._run_heartbeat,
@@ -332,20 +277,16 @@ class HeartbeatCog(commands.Cog):
 
     async def _run_heartbeat(self) -> None:
         """Heartbeat メインループ。結果は通知チャンネルに送信する。"""
-        if not HEARTBEAT_FILE.exists():
-            logger.debug("Heartbeat: HEARTBEAT.md not found, skipping")
-            return
-
-        text = HEARTBEAT_FILE.read_text(encoding="utf-8")
+        text = _read_heartbeat_text()
         if not text.strip():
             return
 
-        state = _parse_heartbeat_state(text)
+        state = parse_heartbeat_state(text)
 
         # Python 側で wrapup 要否を事前判定
-        wrapup_needed = _should_run_wrapup(state)
+        wrapup_needed = should_run_wrapup(state)
 
-        cfg = load_config()
+        cfg = load_platform_config()
         notify_channel_id = cfg.get("heartbeat_channel_id")
 
         # Wrapup は ON/OFF 問わず常にチェック
@@ -371,9 +312,21 @@ class HeartbeatCog(commands.Cog):
             "報告事項がある場合は内容を日本語で送信してください（HEARTBEAT_OK は使わない）。"
         )
 
+        # スキル instructions を注入
+        ctx = self.bot.platform_context
+        registry_instr = self.bot.skill_registry.build_instructions(
+            ctx.name, disabled=ctx.disabled_skills,
+        )
+        skill_instr = (
+            f"[platform: {ctx.name}]\n"
+            + (f"\n{registry_instr}" if registry_instr else "")
+        )
+
         # タイムアウト = 実行間隔（次の heartbeat までに終わればよい）
         interval = cfg.get("heartbeat_interval_minutes", 30)
-        response, timed_out = await run_claude(prompt, timeout=interval * 60)
+        response, timed_out = await run_claude(
+            prompt, timeout=interval * 60, skill_instructions=skill_instr,
+        )
 
         if timed_out or not response:
             logger.warning("Heartbeat: Claude timed out or empty response")
@@ -399,11 +352,19 @@ class HeartbeatCog(commands.Cog):
     async def _trigger_wrapup(self, notify_channel_id: str | None, wrapup_time: str = "05:00"):
         """全ギルドに対して Wrap-up を実行し、結果を通知チャンネルに送信する。"""
         from core.wrapup import run_wrapup
+        from platforms.discord.utils import make_discord_collector
+        from platforms.discord import DISCORD_FORMAT_HINT
 
         any_success = False
         for guild in self.bot.guilds:
             try:
-                summary = await run_wrapup(guild, wrapup_time=wrapup_time)
+                summary = await run_wrapup(
+                    guild_id=guild.id,
+                    guild_name=guild.name,
+                    collect_messages=make_discord_collector(guild),
+                    format_hint=DISCORD_FORMAT_HINT,
+                    wrapup_time=wrapup_time,
+                )
                 if summary:
                     any_success = True
                     if notify_channel_id:
@@ -416,14 +377,14 @@ class HeartbeatCog(commands.Cog):
                 logger.exception("Heartbeat: wrapup error for guild %s: %s", guild.name, e)
 
         if any_success:
-            _update_heartbeat_state("wrapup_done", "true")
-            _update_heartbeat_state("last_updated", datetime.now(JST).strftime("%Y-%m-%d"))
+            update_heartbeat_state(_heartbeat_file(),"wrapup_done", "true")
+            update_heartbeat_state(_heartbeat_file(),"last_updated", datetime.now(JST).strftime("%Y-%m-%d"))
             logger.info("Heartbeat: wrapup completed, wrapup_done=true")
         else:
             logger.warning("Heartbeat: wrapup failed for all guilds, wrapup_done remains false")
 
         # 圧縮チェック
-        state = _parse_heartbeat_state(HEARTBEAT_FILE.read_text(encoding="utf-8"))
+        state = parse_heartbeat_state(_read_heartbeat_text())
         for guild in self.bot.guilds:
             await self._maybe_compress(guild.id, state)
 
@@ -431,46 +392,46 @@ class HeartbeatCog(commands.Cog):
 
     async def _reset_wrapup_done(self):
         """毎日0:00に wrapup_done を false にリセットする。"""
-        _update_heartbeat_state("wrapup_done", "false")
-        _update_heartbeat_state("last_updated", datetime.now(JST).strftime("%Y-%m-%d"))
+        update_heartbeat_state(_heartbeat_file(),"wrapup_done", "false")
+        update_heartbeat_state(_heartbeat_file(),"last_updated", datetime.now(JST).strftime("%Y-%m-%d"))
         logger.info("Heartbeat: midnight reset, wrapup_done=false")
 
     # ── 圧縮ロジック ────────────────────────────
 
     async def _maybe_compress(self, guild_id: int, state: dict):
         """日次→週次、週次→月次の圧縮が必要かチェックし、必要なら実行する。"""
-        from core.wrapup import WRAPUP_DIR
+        from core.wrapup import get_wrapup_dir
 
         today = datetime.now(JST).date()
-        guild_dir = WRAPUP_DIR / str(guild_id)
+        guild_dir = get_wrapup_dir() / str(guild_id)
         if not guild_dir.exists():
             return
 
         # 日次 → 週次（7日経過）
         last_compressed = state.get("last_wrapup_compressed")
         if not last_compressed:
-            _update_heartbeat_state("last_wrapup_compressed", str(today))
+            update_heartbeat_state(_heartbeat_file(),"last_wrapup_compressed", str(today))
         else:
             try:
                 last = date.fromisoformat(last_compressed)
                 if (today - last).days >= 7:
                     await self._compress_daily_to_weekly(guild_id, guild_dir, today)
-                    _update_heartbeat_state("last_wrapup_compressed", str(today))
+                    update_heartbeat_state(_heartbeat_file(),"last_wrapup_compressed", str(today))
             except ValueError:
-                _update_heartbeat_state("last_wrapup_compressed", str(today))
+                update_heartbeat_state(_heartbeat_file(),"last_wrapup_compressed", str(today))
 
         # 週次 → 月次（28日経過）
         last_weekly = state.get("last_weekly_compressed")
         if not last_weekly:
-            _update_heartbeat_state("last_weekly_compressed", str(today))
+            update_heartbeat_state(_heartbeat_file(),"last_weekly_compressed", str(today))
         else:
             try:
                 last = date.fromisoformat(last_weekly)
                 if (today - last).days >= 28:
                     await self._compress_weekly_to_monthly(guild_id, guild_dir, today)
-                    _update_heartbeat_state("last_weekly_compressed", str(today))
+                    update_heartbeat_state(_heartbeat_file(),"last_weekly_compressed", str(today))
             except ValueError:
-                _update_heartbeat_state("last_weekly_compressed", str(today))
+                update_heartbeat_state(_heartbeat_file(),"last_weekly_compressed", str(today))
 
     async def _compress_daily_to_weekly(self, guild_id: int, guild_dir, today: date):
         """7日以上前の日次ファイルを週次サマリーに圧縮する。"""
@@ -593,14 +554,14 @@ class HeartbeatCog(commands.Cog):
     # ─────────────────────────────────────────────
     @app_commands.command(name="heartbeat", description="Heartbeatの状態表示・設定変更")
     async def heartbeat_command(self, interaction: discord.Interaction):
-        if not HEARTBEAT_FILE.exists():
+        text = _read_heartbeat_text()
+        if not text:
             await interaction.response.send_message(
                 embed=make_error_embed("HEARTBEAT.md が見つかりません。"), ephemeral=True
             )
             return
-        text = HEARTBEAT_FILE.read_text(encoding="utf-8")
-        state = _parse_heartbeat_state(text)
-        cfg = load_config()
+        state = parse_heartbeat_state(text)
+        cfg = load_platform_config()
         channels = get_guild_channels(interaction.guild) if interaction.guild else []
         await interaction.response.send_message(
             embed=_build_status_embed(state, cfg),
