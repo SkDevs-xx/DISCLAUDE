@@ -26,7 +26,7 @@ WRAPUP_CHAR_CAP = 800_000  # Discord 収集フェーズの文字数上限
 
 
 async def run_wrapup(
-    bot, channel_id: int,
+    guild: discord.Guild,
     date_from: str | None = None,
     date_to: str | None = None,
     wrapup_time: str = "00:00",
@@ -37,6 +37,8 @@ async def run_wrapup(
     wrapup_time: "HH:MM" 形式。集計の区切り時刻。
     """
     from core.claude import run_claude
+
+    guild_id = guild.id
 
     # ── wrapup_time のパース ──
     wt_h, wt_m = (int(x) for x in wrapup_time.split(":"))
@@ -59,14 +61,6 @@ async def run_wrapup(
     # Discord API 用（after は排他なので1秒引く）
     after_dt = start_dt - timedelta(seconds=1)
     before_dt = end_dt
-
-    # ── guild 特定 ──
-    ch = bot.get_channel(channel_id)
-    if ch is None or not hasattr(ch, "guild") or ch.guild is None:
-        logger.warning("wrapup: guild not found for channel %d", channel_id)
-        return None
-    guild = ch.guild
-    guild_id = guild.id
 
     # ── 全テキストチャンネルからメッセージを収集 ──
     parts: dict[str, list[str]] = {}  # channel_name -> lines
@@ -126,8 +120,7 @@ async def run_wrapup(
         + history_text
     )
 
-    async with bot.get_channel_lock(channel_id):
-        summary, timed_out = await run_claude(prompt)
+    summary, timed_out = await run_claude(prompt)
 
     if timed_out or not summary or summary.startswith("エラーが発生しました"):
         return None

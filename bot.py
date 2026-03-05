@@ -117,7 +117,11 @@ class ClaudeBot(commands.Bot):
                 # cron から時刻を取得（例: "0 5 * * *" → "05:00"）
                 cron_parts = s.get("cron", "0 5 * * *").split()
                 sched_time = f"{int(cron_parts[1]):02d}:{int(cron_parts[0]):02d}"
-                summary = await run_wrapup(self, channel_id, wrapup_time=sched_time)
+                guild = channel.guild if hasattr(channel, "guild") else None
+                if guild is None:
+                    logger.warning("Schedule wrapup: guild not found for channel %d", channel_id)
+                    return
+                summary = await run_wrapup(guild, wrapup_time=sched_time)
                 if summary is None:
                     await channel.send(embed=make_info_embed("ラップアップ", "該当する会話履歴がありませんでした。"))
                 else:

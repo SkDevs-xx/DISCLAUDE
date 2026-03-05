@@ -411,12 +411,8 @@ class HeartbeatCog(commands.Cog):
 
         any_success = False
         for guild in self.bot.guilds:
-            text_channels = [ch for ch in guild.text_channels if ch.permissions_for(guild.me).read_messages]
-            if not text_channels:
-                continue
-            channel_id = text_channels[0].id
             try:
-                summary = await run_wrapup(self.bot, channel_id, wrapup_time=wrapup_time)
+                summary = await run_wrapup(guild, wrapup_time=wrapup_time)
                 if summary:
                     any_success = True
                     if notify_channel_id:
