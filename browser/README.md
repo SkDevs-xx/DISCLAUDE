@@ -18,15 +18,24 @@ Claude Code
 
 メインの [README.md](../README.md) のセクション 9「ブラウザ操作（オプション）」を参照。
 
-`config.json` で `browser_enabled: true` にすると、bot 起動時に以下が自動で立ち上がる:
+`config.json` で `browser_enabled: true` にすると、bot 起動時に以下が自動で立ち上がる。Discord と Slack は**完全に独立した仮想ディスプレイ**で動く:
 
-| プロセス | 役割 | 備考 |
-|---|---|---|
-| **Xtigervnc** | 仮想ディスプレイ `:99` + VNC サーバー（ポート 5900） | GUI 環境では起動しない |
-| **Chrome** | CDP ポート 9222 で待機 | クラッシュ時は自動再起動（指数バックオフ） |
-| **noVNC** | Web VNC クライアント（ポート 6080） | バインド先は `novnc_bind_address` で設定 |
+| プロセス | Discord デフォルト | Slack デフォルト | 備考 |
+|---|---|---|---|
+| **Xtigervnc** | ディスプレイ `:99` / VNC ポート `5900` | ディスプレイ `:100` / VNC ポート `5901` | ロックファイル `/tmp/.X{N}-lock` が存在すれば起動をスキップ |
+| **Chrome** | CDP `9222` / プロファイル `disclaude-chrome-discord` | CDP `9221` / プロファイル `disclaude-chrome-slack` | クラッシュ時は自動再起動（指数バックオフ） |
+| **noVNC** | ポート `6080` | ポート `6081` | バインド先は `novnc_bind_address` で設定 |
 
-> GUI 環境（Windows / Linux デスクトップ）では `DISPLAY` 環境変数が既にあるため、Xtigervnc と noVNC の起動はスキップされる。
+各ポートと表示番号は `config.json` で変更できる:
+
+| キー | 説明 | Discord デフォルト | Slack デフォルト |
+|---|---|---|---|
+| `browser_cdp_port` | Chrome DevTools Protocol のポート | `9222` | `9221` |
+| `browser_novnc_port` | noVNC Web UI のポート | `6080` | `6081` |
+| `browser_vnc_port` | Xtigervnc の VNC ポート | `5900` | `5901` |
+| `browser_vnc_display` | Xtigervnc の仮想ディスプレイ番号 | `":99"` | `":100"` |
+
+> 複数プラットフォームを同時起動する場合は、すべてのポートとディスプレイ番号をプラットフォームごとに別々の値にすること。
 
 ## MCP ツール一覧
 
@@ -94,14 +103,24 @@ Claude が使えるブラウザ操作ツール（23 個）:
 ### Chrome に接続できない
 
 ```bash
+# Discord
 curl http://127.0.0.1:9222/json
+# Slack
+curl http://127.0.0.1:9221/json
 ```
 
-レスポンスがなければ Chrome が起動していないか、ポートが違う。
+レスポンスがなければ Chrome が起動していないか、CDP ポートが違う。`config.json` の `browser_cdp_port` を確認する。
 
 ### ログインが消えた
 
-`~/.config/disclaude-chrome/` が存在するか確認。Chrome の `--user-data-dir` パスが変わっていないか確認。
+プラットフォームごとのプロファイルディレクトリが存在するか確認:
+
+```bash
+ls ~/.config/disclaude-chrome-discord/
+ls ~/.config/disclaude-chrome-slack/
+```
+
+ディレクトリがなければ Cookie が保存されていない。Chrome の `--user-data-dir` パスが変わっていないか確認。
 
 ### MCP サーバーのテスト
 

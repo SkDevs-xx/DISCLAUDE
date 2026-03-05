@@ -111,6 +111,8 @@ SLACK_APP_TOKEN=xapp-...
     "browser_enabled": false,
     "browser_cdp_port": 9222,
     "browser_novnc_port": 6080,
+    "browser_vnc_port": 5900,
+    "browser_vnc_display": ":99",
     "allowed_user_ids": ["あなたのDiscordユーザーID"],
     "heartbeat_enabled": false,
     "heartbeat_channel_id": "",
@@ -125,6 +127,8 @@ SLACK_APP_TOKEN=xapp-...
     "browser_enabled": false,
     "browser_cdp_port": 9221,
     "browser_novnc_port": 6081,
+    "browser_vnc_port": 5901,
+    "browser_vnc_display": ":100",
     "allowed_user_ids": ["あなたのSlackユーザーID"],
     "heartbeat_enabled": false,
     "heartbeat_channel_id": "",
@@ -146,6 +150,8 @@ SLACK_APP_TOKEN=xapp-...
 | `discord.browser_enabled` | ブラウザ操作機能の有効化（後述） | `false` |
 | `discord.browser_cdp_port` | Chrome DevTools Protocol のポート | `9222` |
 | `discord.browser_novnc_port` | noVNC Web UI のポート | `6080` |
+| `discord.browser_vnc_port` | Xtigervnc の VNC ポート | `5900` |
+| `discord.browser_vnc_display` | Xtigervnc の仮想ディスプレイ番号 | `":99"` |
 | `discord.allowed_user_ids` | ボットに話しかけられるユーザーの Discord ID（配列） | なし（必須） |
 | `discord.heartbeat_enabled` | Heartbeat 自律巡回の有効化 | `false` |
 | `discord.heartbeat_channel_id` | Heartbeat 通知を送るチャンネル ID | なし |
@@ -164,6 +170,8 @@ SLACK_APP_TOKEN=xapp-...
 | `slack.browser_enabled` | ブラウザ操作機能の有効化（後述） | `false` |
 | `slack.browser_cdp_port` | Chrome DevTools Protocol のポート | `9221` |
 | `slack.browser_novnc_port` | noVNC Web UI のポート | `6081` |
+| `slack.browser_vnc_port` | Xtigervnc の VNC ポート | `5901` |
+| `slack.browser_vnc_display` | Xtigervnc の仮想ディスプレイ番号 | `":100"` |
 | `slack.reply_in_thread` | メッセージをスレッドで返信するか（`false` でチャンネルに直接投稿） | `true` |
 | `slack.heartbeat_thinking` | Heartbeat 専用の Thinking モード | `false` |
 
@@ -272,7 +280,7 @@ Claude に X への投稿や Gmail の確認など、**ログイン済みの Web
 | **Linux デスクトップ（GUI あり）** | 要インストール | 不要（DISPLAY が既にある） | 不要 | Chrome が画面に表示されるので直接ログイン |
 | **Linux VPS（GUI なし）** | 要インストール | 要（Xtigervnc） | 要（noVNC で遠隔ログイン） | ブラウザから noVNC 経由でログイン |
 
-> `manager.py` は `DISPLAY` 環境変数を自動で検知する。GUI 環境では仮想ディスプレイの起動をスキップし、Chrome だけを立ち上げる。
+> VPS 環境では `browser_vnc_display` に指定した番号の仮想ディスプレイを Xtigervnc で起動する。ディスプレイのロックファイル（`/tmp/.X{N}-lock`）が既に存在する場合は既存のディスプレイを再利用する。
 
 #### GUI 環境（Windows / Linux デスクトップ）の場合
 
@@ -334,14 +342,39 @@ vncpasswd
 {
   "novnc_bind_address": "disclaaudeサーバーのIPアドレス",
   "discord": {
+    "enabled": true,
+    "model": "sonnet",
+    "thinking": false,
+    "skip_permissions": true,
     "browser_enabled": true,
     "browser_cdp_port": 9222,
-    "browser_novnc_port": 6080
+    "browser_novnc_port": 6080,
+    "browser_vnc_port": 5900,
+    "browser_vnc_display": ":99",
+    "allowed_user_ids": ["YOUR_DISCORD_USER_ID"],
+    "heartbeat_enabled": false,
+    "heartbeat_channel_id": "YOUR_HEARTBEAT_CHANNEL_ID",
+    "heartbeat_interval_minutes": 60,
+    "heartbeat_thinking": false,
+    "no_mention_channels": []
   },
   "slack": {
+    "enabled": true,
+    "model": "sonnet",
+    "thinking": false,
+    "skip_permissions": true,
     "browser_enabled": true,
     "browser_cdp_port": 9221,
-    "browser_novnc_port": 6081
+    "browser_novnc_port": 6081,
+    "browser_vnc_port": 5901,
+    "browser_vnc_display": ":100",
+    "allowed_user_ids": ["YOUR_SLACK_USER_ID"],
+    "heartbeat_enabled": false,
+    "heartbeat_channel_id": "YOUR_HEARTBEAT_CHANNEL_ID",
+    "heartbeat_interval_minutes": 60,
+    "heartbeat_thinking": false,
+    "reply_in_thread": false,
+    "no_mention_channels": []
   }
 }
 ```
@@ -351,9 +384,11 @@ vncpasswd
 | `browser_enabled` | `true` にする |
 | `browser_cdp_port` | Chrome CDP ポート（プラットフォームごとに別々のポートを設定） |
 | `browser_novnc_port` | noVNC Web UI ポート（プラットフォームごとに別々のポートを設定） |
+| `browser_vnc_port` | Xtigervnc の VNC ポート（プラットフォームごとに別々のポートを設定） |
+| `browser_vnc_display` | Xtigervnc の仮想ディスプレイ番号（プラットフォームごとに別々の番号を設定） |
 | `novnc_bind_address` | noVNC にアクセスするための IP アドレス（下記参照） |
 
-> **複数プラットフォームを同時起動する場合:** `browser_cdp_port` と `browser_novnc_port` はプラットフォームごとに別々のポートを割り当てること。同じポートを使うと起動時に競合してブラウザが立ち上がらない。
+> **複数プラットフォームを同時起動する場合:** `browser_cdp_port` / `browser_novnc_port` / `browser_vnc_port` / `browser_vnc_display` はすべてプラットフォームごとに別々の値を設定すること。同じ値を使うと起動時に競合してブラウザが立ち上がらない。
 
 **`novnc_bind_address` に何を入れるか:**
 
@@ -378,13 +413,14 @@ journalctl -u disclaude -f
 以下のようなログが出れば成功（Discord + Slack 同時起動の例）:
 
 ```
-Xtigervnc started on :99, VNC port 5900
+Xtigervnc started on :99, VNC port 5900 (pid=...)   ← Discord 用仮想ディスプレイ
 Chrome started with CDP port 9222 (pid=...)
 Chrome CDP ready on port 9222
-noVNC started on port 6080
+noVNC started on port 6080 (pid=...)
+Xtigervnc started on :100, VNC port 5901 (pid=...)  ← Slack 用仮想ディスプレイ
 Chrome started with CDP port 9221 (pid=...)
 Chrome CDP ready on port 9221
-noVNC started on port 6081
+noVNC started on port 6081 (pid=...)
 ```
 
 #### Step 5: 初回ログイン（1回だけ）
