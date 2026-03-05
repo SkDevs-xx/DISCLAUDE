@@ -138,10 +138,10 @@ class ClaudeBot(commands.Bot):
                 sched_model = s.get("model", "sonnet")
                 sched_thinking = s.get("thinking", s.get("mode") == "planning")
                 discord_format_hint = (
-                    "\n\n【出力形式の注意】Discord に直接表示するため、以下のルールに従ってください：\n"
-                    "- 見出しは # / ## / ### を使用する\n"
-                    "- テーブル（| 区切り）は使わず、箇条書き（- ）で代替する\n"
-                    "- 水平線（--- や ***）は使わない\n"
+                    "\n\n【出力形式の注意（厳守）】Discord に直接表示するため、以下のルールに従ってください：\n"
+                    "- 見出しは # / ## / ### のみ使用（#### 以下は禁止）\n"
+                    "- テーブル（| 区切り）は禁止。箇条書き（- ）で代替する\n"
+                    "- 水平線（--- や ***）は禁止\n"
                     "- コードは ``` で囲む"
                 )
                 async with self.get_channel_lock(channel_id):
