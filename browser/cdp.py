@@ -82,7 +82,7 @@ class CDPClient:
             if params:
                 msg["params"] = params
 
-            fut: asyncio.Future = asyncio.get_event_loop().create_future()
+            fut: asyncio.Future = asyncio.get_running_loop().create_future()
             self._pending[cmd_id] = fut
 
             await self._ws.send_json(msg)

@@ -56,7 +56,6 @@ Claude が使えるブラウザ操作ツール（23 個）:
 
 | ツール | 説明 |
 |---|---|
-| `browser_screenshot` | スクリーンショット（base64 JPEG、quality 指定可） |
 | `browser_get_content` | ページのテキスト内容を取得 |
 | `browser_find_element` | テキストや CSS セレクタで要素を探して座標を返す |
 | `browser_evaluate` | JavaScript 実行 |
