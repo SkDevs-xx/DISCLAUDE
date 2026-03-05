@@ -1,6 +1,7 @@
 """
 Discord × Claude Code Bot
 """
+from __future__ import annotations
 
 import asyncio
 import logging
@@ -10,6 +11,8 @@ import uuid
 from pathlib import Path
 from datetime import datetime, timezone
 from logging.handlers import RotatingFileHandler
+from typing import TYPE_CHECKING
+
 import discord
 from discord import app_commands
 from discord.ext import commands
@@ -27,8 +30,7 @@ from core.config import (
 from core.claude import run_claude
 from core.embeds import make_error_embed, make_info_embed, split_message
 from core.attachments import process_attachment
-from __future__ import annotations
-from typing import TYPE_CHECKING
+
 if TYPE_CHECKING:
     from browser.manager import BrowserManager
 
