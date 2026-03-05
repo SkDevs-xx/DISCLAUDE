@@ -166,9 +166,12 @@ class SlackBot:
         platform_cfg = load_platform_config()
         if platform_cfg.get("browser_enabled", False):
             from browser.manager import BrowserManager
+            import os
             port = platform_cfg.get("browser_cdp_port", 9221)
+            novnc_port = platform_cfg.get("browser_novnc_port", 6081)
             novnc_bind = load_config().get("novnc_bind_address", "localhost")
-            self.browser_manager = BrowserManager(cdp_port=port, novnc_bind=novnc_bind)
+            profile_dir = os.path.expanduser("~/.config/disclaude-chrome-slack")
+            self.browser_manager = BrowserManager(cdp_port=port, novnc_port=novnc_port, novnc_bind=novnc_bind, profile_dir=profile_dir)
             await self.browser_manager.start()
 
         # Socket Mode で接続

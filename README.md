@@ -110,6 +110,7 @@ SLACK_APP_TOKEN=xapp-...
     "skip_permissions": true,
     "browser_enabled": false,
     "browser_cdp_port": 9222,
+    "browser_novnc_port": 6080,
     "allowed_user_ids": ["あなたのDiscordユーザーID"],
     "heartbeat_enabled": false,
     "heartbeat_channel_id": "",
@@ -123,6 +124,7 @@ SLACK_APP_TOKEN=xapp-...
     "skip_permissions": true,
     "browser_enabled": false,
     "browser_cdp_port": 9221,
+    "browser_novnc_port": 6081,
     "allowed_user_ids": ["あなたのSlackユーザーID"],
     "heartbeat_enabled": false,
     "heartbeat_channel_id": "",
@@ -143,6 +145,7 @@ SLACK_APP_TOKEN=xapp-...
 | `discord.skip_permissions` | Claude CLI の権限確認をスキップ | `true` |
 | `discord.browser_enabled` | ブラウザ操作機能の有効化（後述） | `false` |
 | `discord.browser_cdp_port` | Chrome DevTools Protocol のポート | `9222` |
+| `discord.browser_novnc_port` | noVNC Web UI のポート | `6080` |
 | `discord.allowed_user_ids` | ボットに話しかけられるユーザーの Discord ID（配列） | なし（必須） |
 | `discord.heartbeat_enabled` | Heartbeat 自律巡回の有効化 | `false` |
 | `discord.heartbeat_channel_id` | Heartbeat 通知を送るチャンネル ID | なし |
@@ -157,6 +160,9 @@ SLACK_APP_TOKEN=xapp-...
 | `slack.enabled` | Slack Bot を起動するか | `false` |
 | `slack.allowed_user_ids` | ボットに話しかけられるユーザーの Slack ユーザー ID（配列） | なし（必須） |
 | `slack.no_mention_channels` | メンション不要で反応するチャンネル ID（配列） | `[]` |
+| `slack.browser_enabled` | ブラウザ操作機能の有効化（後述） | `false` |
+| `slack.browser_cdp_port` | Chrome DevTools Protocol のポート | `9221` |
+| `slack.browser_novnc_port` | noVNC Web UI のポート | `6081` |
 | `slack.reply_in_thread` | メッセージをスレッドで返信するか（`false` でチャンネルに直接投稿） | `true` |
 | `slack.heartbeat_thinking` | Heartbeat 専用の Thinking モード | `false` |
 
@@ -321,25 +327,32 @@ vncpasswd
 
 #### Step 3: config.json を編集
 
-`discord.browser_enabled` を `true` に、`novnc_bind_address` をサーバーの IP に変更する:
+使うプラットフォームの `browser_enabled` を `true` に、`novnc_bind_address` をサーバーの IP に変更する:
 
 ```json
 {
-  "novnc_bind_address": "disclaudeサーバーのIPアドレス",
+  "novnc_bind_address": "disclaaudeサーバーのIPアドレス",
   "discord": {
     "browser_enabled": true,
-    "browser_cdp_port": 9222
+    "browser_cdp_port": 9222,
+    "browser_novnc_port": 6080
+  },
+  "slack": {
+    "browser_enabled": true,
+    "browser_cdp_port": 9221,
+    "browser_novnc_port": 6081
   }
 }
 ```
 
 | 設定 | 説明 |
 |---|---|
-| `discord.browser_enabled` | `true` にする |
-| `discord.browser_cdp_port` | そのまま `9222` でOK |
+| `browser_enabled` | `true` にする |
+| `browser_cdp_port` | Chrome CDP ポート（プラットフォームごとに別々のポートを設定） |
+| `browser_novnc_port` | noVNC Web UI ポート（プラットフォームごとに別々のポートを設定） |
 | `novnc_bind_address` | noVNC にアクセスするための IP アドレス（下記参照） |
 
-> **複数プラットフォームを同時起動する場合:** `browser_cdp_port` はプラットフォームごとに別々のポートを割り当てること（例: discord=`9222`、slack=`9221`、notion=`9220`）。同じポートを使うと起動時に競合してブラウザが立ち上がらない。
+> **複数プラットフォームを同時起動する場合:** `browser_cdp_port` と `browser_novnc_port` はプラットフォームごとに別々のポートを割り当てること。同じポートを使うと起動時に競合してブラウザが立ち上がらない。
 
 **`novnc_bind_address` に何を入れるか:**
 
@@ -361,26 +374,31 @@ sudo systemctl restart disclaude
 journalctl -u disclaude -f
 ```
 
-以下のようなログが出れば成功:
+以下のようなログが出れば成功（Discord + Slack 同時起動の例）:
 
 ```
 Xtigervnc started on :99, VNC port 5900
-Chrome started with CDP port 9222
+Chrome started with CDP port 9222 (pid=...)
 Chrome CDP ready on port 9222
 noVNC started on port 6080
+Chrome started with CDP port 9221 (pid=...)
+Chrome CDP ready on port 9221
+noVNC started on port 6081
 ```
 
 #### Step 5: 初回ログイン（1回だけ）
 
 X や Gmail など、Claude に使わせたいサービスにブラウザから手動でログインする。**ログイン情報（Cookie）はサーバーに保存されるので、これは 1 回だけやれば OK。**
 
-1. PC のブラウザで `http://<novnc_bind_addressのIP>:6080/vnc.html` にアクセス
-   - 例: Tailscale の場合 `http://100.x.x.x:6080/vnc.html`
+1. PC のブラウザで noVNC にアクセス（プラットフォームごとにポートが異なる）
+   - Discord: `http://<novnc_bind_addressのIP>:6080/vnc.html`
+   - Slack: `http://<novnc_bind_addressのIP>:6081/vnc.html`
+   - 例（Tailscale）: `http://100.x.x.x:6080/vnc.html`
 2. Step 2 で設定した VNC パスワードを入力
 3. Chrome の画面が見える。アドレスバーに URL を入力して X や Gmail にログインする
 4. ログインが終わったら VNC 画面のタブを閉じる（Chrome はサーバー上で動き続ける）
 
-> Cookie は `~/.config/disclaude-chrome/` に保存される。Chrome をアップデートしてもログインは維持される。
+> Cookie はプラットフォームごとに `~/.config/disclaude-chrome-discord/` / `~/.config/disclaude-chrome-slack/` に保存される。Chrome をアップデートしてもログインは維持される。
 
 > Chrome がクラッシュしても自動で再起動する（指数バックオフ: 5秒 → 10秒 → ... → 最大5分）。
 
@@ -389,10 +407,13 @@ SSH トンネル経由でアクセスする場合（`novnc_bind_address` が `lo
 手元の PC からポートフォワード:
 
 ```bash
+# Discord
 ssh -L 6080:localhost:6080 disclaude@your-server
+# Slack（別ターミナルで実行）
+ssh -L 6081:localhost:6081 disclaude@your-server
 ```
 
-→ `http://localhost:6080/vnc.html` でアクセスできる。
+→ `http://localhost:6080/vnc.html`（Discord）/ `http://localhost:6081/vnc.html`（Slack）でアクセスできる。
 
 詳細は [browser/README.md](browser/README.md) を参照。
 
@@ -637,7 +658,8 @@ sudo userdel -r disclaude
 ブラウザ操作を使っていた場合、Cookie やログイン情報が残っている:
 
 ```bash
-sudo rm -rf /home/disclaude/.config/disclaude-chrome
+sudo rm -rf /home/disclaude/.config/disclaude-chrome-discord
+sudo rm -rf /home/disclaude/.config/disclaude-chrome-slack
 ```
 
 > Step 2 で `-r` を付けて削除済みなら不要。

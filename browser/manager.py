@@ -9,13 +9,13 @@ import aiohttp
 
 logger = logging.getLogger(__name__)
 
-PROFILE_DIR = os.path.expanduser("~/.config/disclaude-chrome")
+DEFAULT_PROFILE_DIR = os.path.expanduser("~/.config/disclaude-chrome")
 VNC_PASSWD_FILE = os.path.expanduser("~/.vnc/passwd")
 
 
 class BrowserManager:
 
-    def __init__(self, cdp_port: int = 9222, vnc_port: int = 5900, novnc_port: int = 6080, novnc_bind: str = "localhost"):
+    def __init__(self, cdp_port: int = 9222, vnc_port: int = 5900, novnc_port: int = 6080, novnc_bind: str = "localhost", profile_dir: str | None = None):
         self.cdp_port = cdp_port
         self.vnc_port = vnc_port
         self.novnc_port = novnc_port
@@ -25,6 +25,7 @@ class BrowserManager:
         self._novnc_proc: asyncio.subprocess.Process | None = None
         self._watcher: asyncio.Task | None = None
         self._display = ":99"
+        self._profile_dir = profile_dir or DEFAULT_PROFILE_DIR
 
     async def start(self) -> None:
         """Xtigervnc（仮想ディスプレイ+VNC）、Chrome、noVNC を起動する。"""
@@ -76,7 +77,7 @@ class BrowserManager:
         self._chrome_proc = await asyncio.create_subprocess_exec(
             chrome_bin,
             f"--remote-debugging-port={self.cdp_port}",
-            f"--user-data-dir={PROFILE_DIR}",
+            f"--user-data-dir={self._profile_dir}",
             "--no-first-run",
             "--disable-background-timer-throttling",
             stdout=asyncio.subprocess.DEVNULL,

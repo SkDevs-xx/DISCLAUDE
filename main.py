@@ -28,7 +28,7 @@ def _setup_logging():
     fh.setFormatter(fmt)
     sh = logging.StreamHandler()
     sh.setFormatter(fmt)
-    for name in ("discord_bot", "slack_bot"):
+    for name in ("discord_bot", "slack_bot", "browser.manager"):
         lg = logging.getLogger(name)
         lg.setLevel(logging.INFO)
         lg.addHandler(fh)
@@ -130,9 +130,11 @@ def main():
 
     if slack_enabled and discord_enabled:
         # 両方有効な場合はスレッドで並列起動
-        t = threading.Thread(target=_run_discord, daemon=True)
+        # Slack は asyncio.run() なので非メインスレッドでも動作する
+        # discord.py の bot.run() はメインスレッドで動かす必要があるため Discord をメインに
+        t = threading.Thread(target=_run_slack, daemon=True)
         t.start()
-        _run_slack()  # メインスレッドで Slack を起動
+        _run_discord()  # メインスレッドで Discord を起動
     elif slack_enabled:
         _run_slack()
     else:
