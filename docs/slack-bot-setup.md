@@ -50,6 +50,11 @@
         "should_escape": false
       },
       {
+        "command": "/reset-ai",
+        "description": "Reset the conversation session in this channel",
+        "should_escape": false
+      },
+      {
         "command": "/mention-ai",
         "description": "Toggle mention-required setting for this channel",
         "should_escape": false
@@ -217,6 +222,7 @@ INFO  Bolt app is running in Socket Mode!
 | `/model-ai` | AI モデルを切り替える（Sonnet / Opus / Haiku）・Thinking ON/OFF |
 | `/status-ai` | 現在の設定と実行状況を確認する・スレッド返信 ON/OFF を切り替える |
 | `/cancel-ai` | このチャンネルで実行中のタスクをキャンセルする |
+| `/reset-ai` | 会話セッションをリセットする（次のメッセージから新しい会話が始まる） |
 | `/mention-ai` | @メンション不要モードの ON/OFF を切り替える |
 | `/heartbeat-ai` | 定期レポートの設定・手動実行・Heartbeat 専用 Thinking ON/OFF |
 | `/review-ai` | 調査済みトピックのフィードバックレビュー |
