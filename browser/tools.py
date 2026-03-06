@@ -262,17 +262,6 @@ def register_tools(mcp: FastMCP) -> None:
         elements = result.get("result", {}).get("value", [])
         return json.dumps({"elements": elements}, ensure_ascii=False, indent=2)
 
-    @mcp.tool(name="browser_evaluate", description="JavaScript を実行して結果を返す")
-    async def browser_evaluate(expression: str) -> str:
-        if block := await _ensure_connected():
-            return block
-        result = await cdp.send("Runtime.evaluate", {
-            "expression": expression,
-            "returnByValue": True,
-        })
-        value = result.get("result", {}).get("value")
-        return json.dumps({"result": value}, ensure_ascii=False, default=str)
-
     # ─── Tabs ───
 
     @mcp.tool(name="browser_tabs", description="タブ一覧を取得する。tab_index を指定するとそのタブに切り替える")
