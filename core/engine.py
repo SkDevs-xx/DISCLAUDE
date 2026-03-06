@@ -10,6 +10,7 @@ config.json の "engine" フィールドに応じて Claude Code CLI / Codex CLI
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import os
 import re
@@ -75,8 +76,7 @@ async def _run_claude_cli(
     if get_skip_permissions():
         cmd.append("--dangerously-skip-permissions")
     cmd += ["--model", model]
-    if thinking:
-        cmd += ["--effort", "high"]
+    cmd += ["--settings", json.dumps({"alwaysThinkingEnabled": thinking})]
     if session_id:
         if is_new_session:
             cmd += ["--session-id", session_id]
