@@ -1,5 +1,5 @@
 """
-Slack × Claude Code Bot
+Slack × Clive
 """
 
 from __future__ import annotations

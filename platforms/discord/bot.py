@@ -1,5 +1,5 @@
 """
-Discord × Claude Code Bot
+Discord × Clive
 """
 from __future__ import annotations
 
@@ -42,14 +42,14 @@ logger = logging.getLogger("discord_bot")
 # ─────────────────────────────────────────────
 # ボット本体
 # ─────────────────────────────────────────────
-class ClaudeBot(commands.Bot):
+class CliveBot(commands.Bot):
     def __init__(self):
         intents = discord.Intents.default()
         intents.message_content = True
         super().__init__(command_prefix="!", intents=intents)
         self.channel_locks: dict[int, asyncio.Lock] = {}
         self.running_tasks: dict[int, asyncio.Task] = {}  # channel_id -> Task
-        self.running_processes: dict[int, asyncio.subprocess.Process] = {}  # channel_id -> Claude Process
+        self.running_processes: dict[int, asyncio.subprocess.Process] = {}  # channel_id -> Clive Process
         self.scheduler = AsyncIOScheduler(timezone="Asia/Tokyo")
         self.browser_manager: BrowserManager | None = None
         self.platform_context = PlatformContext(

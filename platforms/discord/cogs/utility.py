@@ -220,13 +220,13 @@ class UtilityCog(commands.Cog):
         desc = (
             f"**モデル:** {model}\n"
             f"**Thinking:** {thinking_label}\n"
-            f"**Claude実行中:** {'はい' if self.bot.running_tasks else 'いいえ'}"
+            f"**Clive実行中:** {'はい' if self.bot.running_tasks else 'いいえ'}"
         )
         await interaction.response.send_message(
             embed=make_info_embed("ステータス", desc), ephemeral=True
         )
 
-    @app_commands.command(name="cancel", description="実行中の Claude Code タスクをキャンセルする")
+    @app_commands.command(name="cancel", description="実行中の Clive タスクをキャンセルする")
     async def cancel_command(self, interaction: discord.Interaction):
         channel_id = interaction.channel_id
         task = self.bot.running_tasks.get(channel_id)

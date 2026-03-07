@@ -333,12 +333,12 @@ class HeartbeatCog(commands.Cog):
             logger.info("Heartbeat: wrapup triggered")
             return
 
-        # Heartbeat OFF → Claude 評価スキップ（Wrapup のみ動作）
+        # Heartbeat OFF → Clive 評価スキップ（Wrapup のみ動作）
         if not cfg.get("heartbeat_enabled", True):
-            logger.info("Heartbeat: disabled, skipping Claude evaluation")
+            logger.info("Heartbeat: disabled, skipping Clive evaluation")
             return
 
-        # Claude にチェックリストを評価させる
+        # Clive にチェックリストを評価させる
         now_str = datetime.now(JST).strftime("%Y-%m-%d %H:%M")
         prompt = (
             f"現在時刻: {now_str}\n\n"
@@ -371,13 +371,13 @@ class HeartbeatCog(commands.Cog):
         )
 
         if timed_out or not response:
-            logger.warning("Heartbeat: Claude timed out or empty response")
+            logger.warning("Heartbeat: Clive timed out or empty response")
             return
 
-        # Claude が WRAPUP_NEEDED を返した場合（Python 事前判定は上で処理済み）
+        # Clive が WRAPUP_NEEDED を返した場合（Python 事前判定は上で処理済み）
         if "WRAPUP_NEEDED" in response:
             await self._trigger_wrapup(notify_channel_id, state.get("wrapup_time", "05:00"))
-            logger.info("Heartbeat: wrapup triggered by Claude")
+            logger.info("Heartbeat: wrapup triggered by Clive")
             return
 
         # HEARTBEAT_OK キーワードを除去し、レポート部分があれば送信

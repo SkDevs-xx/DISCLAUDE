@@ -19,7 +19,7 @@ _tl = threading.local()
 # ─────────────────────────────────────────────
 BASE_DIR = Path(__file__).parent.parent
 CONFIG_FILE = BASE_DIR / "config.json"
-CLAUDE_MD_FILE = BASE_DIR / "CLAUDE.md"
+ENGINE_MD_FILE = BASE_DIR / "CLAUDE.md"
 LOG_DIR = BASE_DIR / "log"
 
 # スレッドローカルで管理するワークスペース変数のデフォルト値
@@ -68,18 +68,18 @@ def __getattr__(name: str):
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
-CLAUDE_BIN = shutil.which("claude") or str(Path.home() / ".local" / "bin" / "claude")
+DEFAULT_ENGINE_BIN = shutil.which("claude") or str(Path.home() / ".local" / "bin" / "claude")
 CODEX_BIN = shutil.which("codex") or str(Path.home() / ".local" / "bin" / "codex")
 TIMEOUT_FAST = 180
 TIMEOUT_PLANNING = 300
 
 
-def validate_claude_bin() -> None:
-    """CLAUDE_BIN が実行可能かを確認する。存在しない場合は SystemExit で即終了する。"""
-    if not Path(CLAUDE_BIN).is_file():
+def validate_engine_bin_path() -> None:
+    """DEFAULT_ENGINE_BIN が実行可能かを確認する。存在しない場合は SystemExit で即終了する。"""
+    if not Path(DEFAULT_ENGINE_BIN).is_file():
         import sys
-        print(f"[ERROR] Claude CLI が見つかりません: {CLAUDE_BIN}", file=sys.stderr)
-        print("  インストール方法: https://docs.anthropic.com/ja/docs/claude-code/overview", file=sys.stderr)
+        print(f"[ERROR] Engine CLI が見つかりません: {DEFAULT_ENGINE_BIN}", file=sys.stderr)
+        print("  デフォルトエンジンが見つかりません。環境を確認してください。", file=sys.stderr)
         sys.exit(1)
 
 def validate_codex_bin() -> None:

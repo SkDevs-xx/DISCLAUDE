@@ -76,7 +76,7 @@ async def _download_slack_file_to_path(url: str, token: str, save_path: Path, se
     return False
 
 
-async def handle_claude_message(
+async def handle_clive_message(
     bot: "SlackBot",
     channel_id: str,
     channel_name: str,
@@ -87,7 +87,7 @@ async def handle_claude_message(
     say,
     client,
 ):
-    """Claude に問い合わせて返信する共通処理。"""
+    """Clive に問い合わせて返信する共通処理。"""
     platform_cfg = load_platform_config()
     allowed = platform_cfg.get("allowed_user_ids", [])
     if allowed and user_id not in allowed:
@@ -281,7 +281,7 @@ def register(bot: "SlackBot"):
         # thread_ts がない場合はメッセージ自体の ts をスレッド起点にする
         reply_ts = thread_ts or message_ts
 
-        await handle_claude_message(
+        await handle_clive_message(
             bot=bot,
             channel_id=channel_id,
             channel_name=channel_name,
@@ -320,7 +320,7 @@ def register(bot: "SlackBot"):
         reply_ts = thread_ts or message_ts
         channel_name = "DM" if is_dm else (event.get("channel_name") or channel_id)
 
-        await handle_claude_message(
+        await handle_clive_message(
             bot=bot,
             channel_id=channel_id,
             channel_name=channel_name,

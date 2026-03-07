@@ -1,4 +1,4 @@
-"""MCP ツール定義 — Claude に公開するブラウザ操作ツール。"""
+"""MCP ツール定義 — Cliveに公開するブラウザ操作ツール。"""
 
 import asyncio
 import json

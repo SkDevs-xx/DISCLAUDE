@@ -150,7 +150,7 @@ class CDPClient:
         await self.connect(port=port, tab_index=tab_index)
 
     async def _handle_dialog_event(self, params: dict) -> None:
-        """ダイアログイベントを処理する。alertのみ自動OK、それ以外は保留してClaudeに委ねる。"""
+        """ダイアログイベントを処理する。alertのみ自動OK、それ以外は保留してCliveに委ねる。"""
         dialog_type = params.get("type", "")
         message = params.get("message", "")
         url = params.get("url", "")
@@ -162,7 +162,7 @@ class CDPClient:
                 await self.send("Page.handleJavaScriptDialog", {"accept": True})
             else:
                 # それ以外は保留 → 次のMCPツール呼び出し時にClaudeへ通知
-                logger.info("Dialog pending for Claude: type=%s url=%s message=%s", dialog_type, url, message)
+                logger.info("Dialog pending for Clive: type=%s url=%s message=%s", dialog_type, url, message)
                 self.pending_dialog = {
                     "type": dialog_type,
                     "url": url,

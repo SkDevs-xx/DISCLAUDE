@@ -66,12 +66,12 @@ async def _run_claude_cli(
     skill_instructions: str,
 ) -> tuple[str, bool, str | None]:
     """Claude Code CLI を subprocess で実行する。"""
-    from core.config import CLAUDE_BIN
+    from core.config import DEFAULT_ENGINE_BIN
 
     if timeout is None:
         timeout = TIMEOUT_PLANNING if thinking else TIMEOUT_FAST
 
-    cmd = [CLAUDE_BIN, "-p", "--output-format", "text"]
+    cmd = [DEFAULT_ENGINE_BIN, "-p", "--output-format", "text"]
     if skill_instructions:
         cmd += ["--system-prompt", skill_instructions]
     if get_skip_permissions():
@@ -271,5 +271,5 @@ def validate_engine_bin() -> None:
     if engine == "codex":
         _cfg.validate_codex_bin()
     else:
-        # デフォルト: Claude CLI
-        _cfg.validate_claude_bin()
+        # デフォルト: Claude CLI等
+        _cfg.validate_engine_bin_path()

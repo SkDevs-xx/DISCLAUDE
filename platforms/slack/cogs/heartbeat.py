@@ -159,7 +159,7 @@ async def _run_heartbeat_core(bot: "SlackBot"):
         return
 
     if not cfg.get("heartbeat_enabled", True):
-        logger.info("Heartbeat: disabled, skipping Claude evaluation")
+        logger.info("Heartbeat: disabled, skipping Clive evaluation")
         return
 
     now_str = datetime.now(JST).strftime("%Y-%m-%d %H:%M")
@@ -189,12 +189,12 @@ async def _run_heartbeat_core(bot: "SlackBot"):
     )
 
     if timed_out or not response:
-        logger.warning("Heartbeat: Claude timed out or empty response")
+        logger.warning("Heartbeat: Clive timed out or empty response")
         return
 
     if "WRAPUP_NEEDED" in response:
         await _trigger_wrapup(bot, notify_channel_id, state.get("wrapup_time", "05:00"))
-        logger.info("Heartbeat: wrapup triggered by Claude")
+        logger.info("Heartbeat: wrapup triggered by Clive")
         return
 
     report = response.replace("HEARTBEAT_OK", "").strip()

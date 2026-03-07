@@ -39,7 +39,7 @@ def _status_blocks(model: str, thinking: bool, running: bool, reply_in_thread: b
                     f"*ステータス*\n"
                     f"- モデル: *{model}*\n"
                     f"- Thinking: *{thinking_label}*\n"
-                    f"- Claude 実行中: *{'はい' if running else 'いいえ'}*\n"
+                    f"- Clive 実行中: *{'はい' if running else 'いいえ'}*\n"
                     f"- スレッド返信: *{thread_label}*"
                 ),
             },
