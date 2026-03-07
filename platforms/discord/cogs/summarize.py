@@ -14,6 +14,7 @@ import json
 import logging
 import re
 import tempfile
+import aiofiles
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -117,13 +118,13 @@ class SummarizeCog(commands.Cog):
             msg_count = 0
 
             try:
-                with open(tmp_fd, "w", encoding="utf-8") as f:
+                async with aiofiles.open(tmp_fd, "w", encoding="utf-8") as f:
                     async for msg in channel.history(limit=None, oldest_first=True):
                         if not msg.content:
                             continue
                         ts = msg.created_at.strftime("%Y-%m-%d %H:%M")
                         line = f"[{ts}] {msg.author.display_name}: {msg.content}\n"
-                        f.write(line)
+                        await f.write(line)
                         total_chars += len(line)
                         msg_count += 1
                         if total_chars >= FETCH_CHAR_CAP:
@@ -160,13 +161,13 @@ class SummarizeCog(commands.Cog):
                 return
 
             # ─── tmp ファイルから先頭・末尾サンプルを生成 ──────────────────────
-            with open(tmp_path, "rb") as _f:
-                head_bytes = _f.read(SAMPLE_HEAD_CHARS * 4)
-                _f.seek(0, 2)
-                _total = _f.tell()
+            async with aiofiles.open(tmp_path, "rb") as _f:
+                head_bytes = await _f.read(SAMPLE_HEAD_CHARS * 4)
+                await _f.seek(0, 2)
+                _total = await _f.tell()
                 if _total > (SAMPLE_HEAD_CHARS + SAMPLE_TAIL_CHARS) * 4:
-                    _f.seek(max(0, _total - SAMPLE_TAIL_CHARS * 4))
-                    tail_bytes = _f.read()
+                    await _f.seek(max(0, _total - SAMPLE_TAIL_CHARS * 4))
+                    tail_bytes = await _f.read()
                 else:
                     tail_bytes = b""
             head = head_bytes.decode("utf-8", errors="replace")[:SAMPLE_HEAD_CHARS]
@@ -195,8 +196,8 @@ class SummarizeCog(commands.Cog):
 
             lines = []
             char_count = 0
-            with open(tmp_path, encoding="utf-8") as f:
-                for line in f:
+            async with aiofiles.open(tmp_path, encoding="utf-8") as f:
+                async for line in f:
                     line = line.rstrip("\n")
                     if not line:
                         continue
@@ -225,8 +226,8 @@ class SummarizeCog(commands.Cog):
 
             # フィルタ結果が空なら全件（上限まで）にフォールバック
             if not lines:
-                with open(tmp_path, encoding="utf-8") as f:
-                    for line in f:
+                async with aiofiles.open(tmp_path, encoding="utf-8") as f:
+                    async for line in f:
                         line = line.rstrip("\n")
                         if not line:
                             continue
@@ -261,7 +262,8 @@ class SummarizeCog(commands.Cog):
         finally:
             # tmp ファイルを必ず削除
             if tmp_path and tmp_path.exists():
-                tmp_path.unlink()
+                import asyncio
+                await asyncio.to_thread(tmp_path.unlink)
 
 
 async def setup(bot: commands.Bot):

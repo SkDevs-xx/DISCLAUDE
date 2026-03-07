@@ -124,6 +124,7 @@ async def run_wrapup(
     guild_dir = get_wrapup_dir() / str(guild_id)
     guild_dir.mkdir(parents=True, exist_ok=True)
     wp_file = daily_wrapup_path(guild_id, d_from)
-    wp_file.write_text(f"# {date_label}\n\n{summary}\n", encoding="utf-8")
+    import asyncio
+    await asyncio.to_thread(wp_file.write_text, f"# {date_label}\n\n{summary}\n", encoding="utf-8")
 
     return summary

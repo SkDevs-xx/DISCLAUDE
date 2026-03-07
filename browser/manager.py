@@ -54,6 +54,7 @@ class BrowserManager:
                 "-PasswordFile", VNC_PASSWD_FILE,
                 stdout=asyncio.subprocess.DEVNULL,
                 stderr=asyncio.subprocess.DEVNULL,
+                preexec_fn=os.setsid,
             )
             await asyncio.sleep(1)
             logger.info("Xtigervnc started on %s, VNC port %d (pid=%d)",
@@ -93,6 +94,7 @@ class BrowserManager:
             stdout=asyncio.subprocess.DEVNULL,
             stderr=asyncio.subprocess.DEVNULL,
             env=chrome_env,
+            preexec_fn=os.setsid,
         )
         logger.info("Chrome started with CDP port %d (pid=%d)", self.cdp_port, self._chrome_proc.pid)
 
@@ -131,6 +133,7 @@ class BrowserManager:
             "--listen", f"{self.novnc_bind}:{self.novnc_port}",
             stdout=asyncio.subprocess.DEVNULL,
             stderr=asyncio.subprocess.DEVNULL,
+            preexec_fn=os.setsid,
         )
         logger.info("noVNC started on port %d (pid=%d)", self.novnc_port, self._novnc_proc.pid)
 
@@ -144,17 +147,24 @@ class BrowserManager:
                 pass
             self._watcher = None
 
+        import signal
         for name, proc in [
             ("noVNC", self._novnc_proc),
             ("Chrome", self._chrome_proc),
             ("Xtigervnc", self._xvnc_proc),
         ]:
             if proc and proc.returncode is None:
-                proc.terminate()
+                try:
+                    os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
+                except ProcessLookupError:
+                    pass
                 try:
                     await asyncio.wait_for(proc.wait(), timeout=5)
                 except asyncio.TimeoutError:
-                    proc.kill()
+                    try:
+                        os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+                    except ProcessLookupError:
+                        pass
                 logger.info("%s stopped (pid=%d)", name, proc.pid)
         self._novnc_proc = None
         self._chrome_proc = None

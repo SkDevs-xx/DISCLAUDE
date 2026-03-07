@@ -118,7 +118,7 @@ class HeartbeatSettingsModal(discord.ui.Modal, title="Heartbeat 詳細設定"):
                     h, m = new_time.split(":")
                     if not (0 <= int(h) <= 23 and 0 <= int(m) <= 59):
                         raise ValueError
-                    update_heartbeat_state(_heartbeat_file(),"wrapup_time", f'"{new_time}"')
+                    await update_heartbeat_state(_heartbeat_file(),"wrapup_time", f'"{new_time}"')
                 except ValueError:
                     errors.append("Wrapup 時刻が不正です。")
 
@@ -144,7 +144,7 @@ class HeartbeatSettingsModal(discord.ui.Modal, title="Heartbeat 詳細設定"):
         # 毎回チェック
         new_checklist = self.checklist_input.value.strip()
         if new_checklist is not None:
-            update_checklist_section(_heartbeat_file(),new_checklist)
+            await update_checklist_section(_heartbeat_file(),new_checklist)
 
         if errors:
             await interaction.response.send_message(
@@ -406,8 +406,8 @@ class HeartbeatCog(commands.Cog):
                 logger.exception("Heartbeat: wrapup error for guild %s: %s", guild.name, e)
 
         if any_success:
-            update_heartbeat_state(_heartbeat_file(),"wrapup_done", "true")
-            update_heartbeat_state(_heartbeat_file(),"last_updated", datetime.now(JST).strftime("%Y-%m-%d"))
+            await update_heartbeat_state(_heartbeat_file(),"wrapup_done", "true")
+            await update_heartbeat_state(_heartbeat_file(),"last_updated", datetime.now(JST).strftime("%Y-%m-%d"))
             logger.info("Heartbeat: wrapup completed, wrapup_done=true")
         else:
             logger.warning("Heartbeat: wrapup failed for all guilds, wrapup_done remains false")
@@ -421,8 +421,8 @@ class HeartbeatCog(commands.Cog):
 
     async def _reset_wrapup_done(self):
         """毎日0:00に wrapup_done を false にリセットする。"""
-        update_heartbeat_state(_heartbeat_file(),"wrapup_done", "false")
-        update_heartbeat_state(_heartbeat_file(),"last_updated", datetime.now(JST).strftime("%Y-%m-%d"))
+        await update_heartbeat_state(_heartbeat_file(),"wrapup_done", "false")
+        await update_heartbeat_state(_heartbeat_file(),"last_updated", datetime.now(JST).strftime("%Y-%m-%d"))
         logger.info("Heartbeat: midnight reset, wrapup_done=false")
 
     # ── 圧縮ロジック ────────────────────────────
@@ -439,28 +439,28 @@ class HeartbeatCog(commands.Cog):
         # 日次 → 週次（7日経過）
         last_compressed = state.get("last_wrapup_compressed")
         if not last_compressed:
-            update_heartbeat_state(_heartbeat_file(),"last_wrapup_compressed", str(today))
+            await update_heartbeat_state(_heartbeat_file(),"last_wrapup_compressed", str(today))
         else:
             try:
                 last = date.fromisoformat(last_compressed)
                 if (today - last).days >= 7:
                     await self._compress_daily_to_weekly(guild_id, guild_dir, today)
-                    update_heartbeat_state(_heartbeat_file(),"last_wrapup_compressed", str(today))
+                    await update_heartbeat_state(_heartbeat_file(),"last_wrapup_compressed", str(today))
             except ValueError:
-                update_heartbeat_state(_heartbeat_file(),"last_wrapup_compressed", str(today))
+                await update_heartbeat_state(_heartbeat_file(),"last_wrapup_compressed", str(today))
 
         # 週次 → 月次（28日経過）
         last_weekly = state.get("last_weekly_compressed")
         if not last_weekly:
-            update_heartbeat_state(_heartbeat_file(),"last_weekly_compressed", str(today))
+            await update_heartbeat_state(_heartbeat_file(),"last_weekly_compressed", str(today))
         else:
             try:
                 last = date.fromisoformat(last_weekly)
                 if (today - last).days >= 28:
                     await self._compress_weekly_to_monthly(guild_id, guild_dir, today)
-                    update_heartbeat_state(_heartbeat_file(),"last_weekly_compressed", str(today))
+                    await update_heartbeat_state(_heartbeat_file(),"last_weekly_compressed", str(today))
             except ValueError:
-                update_heartbeat_state(_heartbeat_file(),"last_weekly_compressed", str(today))
+                await update_heartbeat_state(_heartbeat_file(),"last_weekly_compressed", str(today))
 
     async def _compress_daily_to_weekly(self, guild_id: int, guild_dir, today: date):
         """7日以上前の日次ファイルを週次サマリーに圧縮する。"""

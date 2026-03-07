@@ -212,8 +212,8 @@ async def _trigger_wrapup(bot: "SlackBot", notify_channel_id: str | None, wrapup
         if summary and notify_channel_id:
             for chunk in split_message(summary, max_len=3000):
                 await client.chat_postMessage(channel=notify_channel_id, text=chunk)
-        update_heartbeat_state(_heartbeat_file(), "wrapup_done", "true")
-        update_heartbeat_state(_heartbeat_file(), "last_updated", datetime.now(JST).strftime("%Y-%m-%d"))
+        await update_heartbeat_state(_heartbeat_file(), "wrapup_done", "true")
+        await update_heartbeat_state(_heartbeat_file(), "last_updated", datetime.now(JST).strftime("%Y-%m-%d"))
         logger.info("Heartbeat: wrapup completed")
     except Exception as e:
         logger.exception("Heartbeat: wrapup error: %s", e)
@@ -232,27 +232,27 @@ async def _maybe_compress(bot: "SlackBot", state: dict):
 
     last_compressed = state.get("last_wrapup_compressed")
     if not last_compressed:
-        update_heartbeat_state(_heartbeat_file(), "last_wrapup_compressed", str(today))
+        await update_heartbeat_state(_heartbeat_file(), "last_wrapup_compressed", str(today))
     else:
         try:
             last = date.fromisoformat(last_compressed)
             if (today - last).days >= 7:
                 await _compress_daily_to_weekly(guild_dir, today)
-                update_heartbeat_state(_heartbeat_file(), "last_wrapup_compressed", str(today))
+                await update_heartbeat_state(_heartbeat_file(), "last_wrapup_compressed", str(today))
         except ValueError:
-            update_heartbeat_state(_heartbeat_file(), "last_wrapup_compressed", str(today))
+            await update_heartbeat_state(_heartbeat_file(), "last_wrapup_compressed", str(today))
 
     last_weekly = state.get("last_weekly_compressed")
     if not last_weekly:
-        update_heartbeat_state(_heartbeat_file(), "last_weekly_compressed", str(today))
+        await update_heartbeat_state(_heartbeat_file(), "last_weekly_compressed", str(today))
     else:
         try:
             last = date.fromisoformat(last_weekly)
             if (today - last).days >= 28:
                 await _compress_weekly_to_monthly(guild_dir, today)
-                update_heartbeat_state(_heartbeat_file(), "last_weekly_compressed", str(today))
+                await update_heartbeat_state(_heartbeat_file(), "last_weekly_compressed", str(today))
         except ValueError:
-            update_heartbeat_state(_heartbeat_file(), "last_weekly_compressed", str(today))
+            await update_heartbeat_state(_heartbeat_file(), "last_weekly_compressed", str(today))
 
 
 async def _compress_daily_to_weekly(guild_dir, today: date):
@@ -500,7 +500,7 @@ def register(bot: "SlackBot"):
         await ack()
 
         if new_time:
-            update_heartbeat_state(_heartbeat_file(), "wrapup_time", f'"{new_time}"')
+            await update_heartbeat_state(_heartbeat_file(), "wrapup_time", f'"{new_time}"')
 
         if new_interval:
             minutes = int(new_interval)
@@ -517,7 +517,7 @@ def register(bot: "SlackBot"):
 
         new_checklist = values.get("checklist_block", {}).get("checklist_input", {}).get("value", "")
         if new_checklist is not None:
-            update_checklist_section(_heartbeat_file(), new_checklist)
+            await update_checklist_section(_heartbeat_file(), new_checklist)
 
     @app.action("heartbeat_toggle_on")
     async def action_hb_on(ack, respond, client):
@@ -573,6 +573,6 @@ def register(bot: "SlackBot"):
 
 
 async def _reset_wrapup_done():
-    update_heartbeat_state(_heartbeat_file(), "wrapup_done", "false")
-    update_heartbeat_state(_heartbeat_file(), "last_updated", datetime.now(JST).strftime("%Y-%m-%d"))
+    await update_heartbeat_state(_heartbeat_file(), "wrapup_done", "false")
+    await update_heartbeat_state(_heartbeat_file(), "last_updated", datetime.now(JST).strftime("%Y-%m-%d"))
     logger.info("Heartbeat: midnight reset, wrapup_done=false")

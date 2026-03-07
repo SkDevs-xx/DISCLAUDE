@@ -86,8 +86,8 @@ def _logger() -> "logging.Logger":
     return logging.getLogger(f"{name}_bot" if name else "clive")
 
 
-def _atomic_write_json(path: Path, data) -> None:
-    """tempfile + os.rename で JSON を安全に書き込む。"""
+def _do_atomic_write_json(path: Path, data) -> None:
+    """内部実装: tempfile + os.replace で JSON を安全に書き込む。"""
     path.parent.mkdir(parents=True, exist_ok=True)
     fd, tmp = tempfile.mkstemp(dir=path.parent, suffix=".tmp")
     try:
@@ -100,6 +100,19 @@ def _atomic_write_json(path: Path, data) -> None:
         except OSError:
             pass
         raise
+
+
+def _atomic_write_json(path: Path, data) -> None:
+    """適宜スレッドプールを利用して JSON を安全に書き込む。"""
+    import asyncio
+    try:
+        loop = asyncio.get_running_loop()
+        # イベントループが実行中の場合は別スレッドで実行してブロックを回避する
+        # （呼び出し側が await していないため Fire-and-Forget になるが、ファイルの書き込み自体はアトミック）
+        loop.run_in_executor(None, _do_atomic_write_json, path, data)
+    except RuntimeError:
+        # イベントループがない（同期実行時など）はそのまま実行
+        _do_atomic_write_json(path, data)
 
 
 # ─────────────────────────────────────────────

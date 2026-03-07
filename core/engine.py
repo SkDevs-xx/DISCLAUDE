@@ -104,6 +104,7 @@ async def _run_claude_cli(
             stderr=asyncio.subprocess.PIPE,
             cwd=str(BASE_DIR),
             env=env,
+            preexec_fn=os.setsid,
         )
         if on_process is not None:
             on_process(proc)
@@ -120,16 +121,18 @@ async def _run_claude_cli(
         return stdout.decode("utf-8", errors="replace").strip(), False
     except asyncio.TimeoutError:
         if proc is not None:
+            import signal
             try:
-                proc.kill()
+                os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
                 await proc.wait()
             except ProcessLookupError:
                 pass
         return "", True
     except asyncio.CancelledError:
         if proc is not None:
+            import signal
             try:
-                proc.kill()
+                os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
                 await proc.wait()
             except ProcessLookupError:
                 pass
