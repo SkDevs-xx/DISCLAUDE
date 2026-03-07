@@ -147,6 +147,7 @@ class HeartbeatSettingsModal(discord.ui.Modal, title="Heartbeat 詳細設定"):
                     IntervalTrigger(minutes=minutes),
                     id="heartbeat_main",
                     replace_existing=True,
+                    misfire_grace_time=60,
                 )
             except ValueError:
                 errors.append("実行間隔は1以上の整数で入力してください。")
@@ -299,12 +300,14 @@ class HeartbeatCog(commands.Cog):
             IntervalTrigger(minutes=interval),
             id="heartbeat_main",
             replace_existing=True,
+            misfire_grace_time=60,
         )
         self.bot.scheduler.add_job(
             self._reset_wrapup_done,
             CronTrigger(hour=0, minute=0),
             id="heartbeat_midnight_reset",
             replace_existing=True,
+            misfire_grace_time=60,
         )
         logger.info("Heartbeat registered: interval=%dm", interval)
 

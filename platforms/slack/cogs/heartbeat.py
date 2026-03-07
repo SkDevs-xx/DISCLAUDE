@@ -378,6 +378,7 @@ def register(bot: "SlackBot"):
         id="heartbeat_main",
         replace_existing=True,
         args=[bot],
+        misfire_grace_time=60,
     )
     bot.scheduler.add_job(
         _reset_wrapup_done,
@@ -385,6 +386,7 @@ def register(bot: "SlackBot"):
         id="heartbeat_midnight_reset",
         replace_existing=True,
         args=[],
+        misfire_grace_time=60,
     )
     logger.info("Heartbeat registered: interval=%dm", interval)
 
@@ -534,6 +536,7 @@ def register(bot: "SlackBot"):
                 id="heartbeat_main",
                 replace_existing=True,
                 args=[bot],
+                misfire_grace_time=60,
             )
 
         new_checklist = values.get("checklist_block", {}).get("checklist_input", {}).get("value", "")
