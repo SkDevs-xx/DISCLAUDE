@@ -194,7 +194,8 @@ def load_schedules() -> list:
             data = json.load(fp)
             return data if isinstance(data, list) else []
     except (json.JSONDecodeError, ValueError):
-        return []
+        _logger().error("schedules.json is corrupted.")
+        return None
 
 def save_schedules(schedules: list) -> None:
     _atomic_write_json(_tl_get("SCHEDULES_FILE"), schedules)

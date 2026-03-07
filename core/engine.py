@@ -90,10 +90,9 @@ async def _run_claude_cli(
     )
 
     env = dict(os.environ)
-    if skill_instructions:
-        m = re.search(r"\[platform:\s*(\w+)\]", skill_instructions)
-        if m:
-            env["CLIVE_PLATFORM"] = m.group(1)
+    platform_name = _cfg._tl_get("PLATFORM_NAME")
+    if platform_name:
+        env["CLIVE_PLATFORM"] = platform_name
 
     proc: asyncio.subprocess.Process | None = None
     try:

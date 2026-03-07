@@ -96,11 +96,16 @@ class ClaudeBot(commands.Bot):
 
     def _reload_schedules(self):
         """schedules.json を読み込んでスケジューラに登録"""
+        schedules = load_schedules()
+        if schedules is None:
+            logger.error("schedules.json is corrupted. Skipping schedule reload.")
+            return
+
         for job in self.scheduler.get_jobs():
             if job.id.startswith("sched_"):
                 job.remove()
 
-        for s in load_schedules():
+        for s in schedules:
             if s.get("status") != "active":
                 continue
             try:
@@ -165,10 +170,11 @@ class ClaudeBot(commands.Bot):
         finally:
             # run_count / last_run は成功・失敗に関わらず更新
             schedules = load_schedules()
-            for item in schedules:
-                if item["id"] == s["id"]:
-                    item["run_count"] = item.get("run_count", 0) + 1
-                    item["last_run"] = datetime.now(timezone.utc).isoformat()
+            if schedules is not None:
+                for item in schedules:
+                    if item["id"] == s["id"]:
+                        item["run_count"] = item.get("run_count", 0) + 1
+                        item["last_run"] = datetime.now(timezone.utc).isoformat()
             save_schedules(schedules)
 
     async def close(self):

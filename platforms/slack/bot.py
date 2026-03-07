@@ -80,11 +80,16 @@ class SlackBot:
 
     def _reload_schedules(self):
         """schedules.json を読み込んでスケジューラに登録する。"""
+        schedules = load_schedules()
+        if schedules is None:
+            logger.error("schedules.json is corrupted. Skipping schedule reload.")
+            return
+
         for job in self.scheduler.get_jobs():
             if job.id.startswith("sched_"):
                 job.remove()
 
-        for s in load_schedules():
+        for s in schedules:
             if s.get("status") != "active":
                 continue
             try:
@@ -149,10 +154,11 @@ class SlackBot:
             logger.exception("Schedule execution error (%s / %s): %s", s.get("id"), s.get("name"), e)
         finally:
             schedules = load_schedules()
-            for item in schedules:
-                if item.get("id") == s.get("id") and item.get("id"):
-                    item["run_count"] = item.get("run_count", 0) + 1
-                    item["last_run"] = datetime.now(timezone.utc).isoformat()
+            if schedules is not None:
+                for item in schedules:
+                    if item.get("id") == s.get("id") and item.get("id"):
+                        item["run_count"] = item.get("run_count", 0) + 1
+                        item["last_run"] = datetime.now(timezone.utc).isoformat()
             save_schedules(schedules)
 
     async def start(self):
