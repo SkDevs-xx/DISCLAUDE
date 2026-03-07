@@ -251,21 +251,26 @@ class ClaudeBot(commands.Bot):
             )
             return
 
-        injected_text = ""
-        image_paths: list[Path] = []
-        for att in message.attachments:
-            text_part, image_path = await process_attachment(att)
-            if text_part:
-                injected_text += text_part
-            if image_path is not None:
-                image_paths.append(image_path)
-
-        if not user_content and not injected_text:
-            return
-
-        full_prompt = user_content + injected_text
-
         try:
+            injected_text = ""
+            image_paths: list[Path] = []
+            for att in message.attachments:
+                text_part, image_path = await process_attachment(att)
+                if text_part:
+                    injected_text += text_part
+                if image_path is not None:
+                    image_paths.append(image_path)
+
+            if not user_content and not injected_text:
+                return
+
+            full_prompt = ""
+            if user_content:
+                full_prompt += f"<user_input>\n{user_content}\n</user_input>\n"
+            if injected_text:
+                full_prompt += f"<attachments>\n{injected_text}\n</attachments>\n"
+            full_prompt = full_prompt.strip()
+
             try:
                 await message.add_reaction("🤔")
             except Exception:
