@@ -175,7 +175,7 @@ async def handle_clive_message(
             model, thinking = get_model_config()
             registry_instr = bot.skill_registry.build_instructions(
                 bot.platform_context.name,
-                disabled=bot.platform_context.disabled_skills,
+                disabled=bot.platform_context.disabled_skills | frozenset({"heartbeat"}),
                 exclude_user_invocable=True,
             )
             skill_instr = (

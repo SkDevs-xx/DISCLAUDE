@@ -66,6 +66,7 @@ async def _run_claude_cli(
     is_new_session: bool,
     on_process: "Callable[[asyncio.subprocess.Process], None] | None",
     skill_instructions: str,
+    platform_name: str | None,
 ) -> tuple[str, bool, str | None]:
     """Claude Code CLI を subprocess で実行する。"""
     from core.config import DEFAULT_ENGINE_BIN
@@ -99,9 +100,9 @@ async def _run_claude_cli(
     )
 
     env = dict(os.environ)
-    platform_name = _cfg._tl_get("PLATFORM_NAME")
-    if platform_name:
-        env["CLIVE_PLATFORM"] = platform_name
+    env_platform_name = _cfg._tl_get("PLATFORM_NAME")
+    if env_platform_name:
+        env["CLIVE_PLATFORM"] = env_platform_name
 
     proc: asyncio.subprocess.Process | None = None
     try:

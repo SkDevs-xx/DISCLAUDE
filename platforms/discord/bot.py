@@ -287,7 +287,7 @@ class CliveBot(commands.Bot):
                     model, thinking = get_model_config()
                     registry_instr = self.skill_registry.build_instructions(
                         self.platform_context.name,
-                        disabled=self.platform_context.disabled_skills,
+                        disabled=self.platform_context.disabled_skills | frozenset({"heartbeat"}),
                         exclude_user_invocable=True,
                     )
                     skill_instr = (
