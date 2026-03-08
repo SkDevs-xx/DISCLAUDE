@@ -72,7 +72,7 @@ async def _run_claude_cli(
         timeout = TIMEOUT_PLANNING if thinking else TIMEOUT_FAST
 
     cmd = [DEFAULT_ENGINE_BIN, "-p", "--output-format", "text"]
-    if skill_instructions:
+    if skill_instructions and is_new_session:
         cmd += ["--system-prompt", skill_instructions]
     if get_skip_permissions():
         cmd.append("--dangerously-skip-permissions")
@@ -182,7 +182,11 @@ async def _run_codex_cli(
     cmd += ["--model", model]
 
     # [PROMPT] を引数として末尾に追加
-    full_prompt = f"{skill_instructions}\n\n{prompt}" if skill_instructions else prompt
+    # セッション継続時はスキル指示を省略（AGENTS.md は Codex CLI が毎回読むため維持される）
+    if skill_instructions and is_new_session:
+        full_prompt = f"{skill_instructions}\n\n{prompt}"
+    else:
+        full_prompt = prompt
     cmd.append(full_prompt)
 
     _logger().info(

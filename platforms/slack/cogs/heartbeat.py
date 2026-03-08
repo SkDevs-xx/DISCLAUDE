@@ -174,7 +174,10 @@ async def _run_heartbeat_core(bot: "SlackBot"):
     )
 
     ctx = bot.platform_context
-    registry_instr = bot.skill_registry.build_instructions(ctx.name, disabled=ctx.disabled_skills)
+    registry_instr = bot.skill_registry.build_instructions(
+        ctx.name, disabled=ctx.disabled_skills,
+        exclude_user_invocable=True,
+    )
     skill_instr = (
         f"[platform: {ctx.name}]\n"
         + (f"\n{ctx.format_hint}\n" if ctx.format_hint else "")

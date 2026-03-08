@@ -176,6 +176,7 @@ async def handle_clive_message(
             registry_instr = bot.skill_registry.build_instructions(
                 bot.platform_context.name,
                 disabled=bot.platform_context.disabled_skills,
+                exclude_user_invocable=True,
             )
             skill_instr = (
                 f"[platform: {bot.platform_context.name}]\n"

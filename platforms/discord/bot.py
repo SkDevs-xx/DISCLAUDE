@@ -288,6 +288,7 @@ class CliveBot(commands.Bot):
                     registry_instr = self.skill_registry.build_instructions(
                         self.platform_context.name,
                         disabled=self.platform_context.disabled_skills,
+                        exclude_user_invocable=True,
                     )
                     skill_instr = (
                         f"[platform: {self.platform_context.name}]\n"

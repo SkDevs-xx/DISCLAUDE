@@ -354,6 +354,7 @@ class HeartbeatCog(commands.Cog):
         ctx = self.bot.platform_context
         registry_instr = self.bot.skill_registry.build_instructions(
             ctx.name, disabled=ctx.disabled_skills,
+            exclude_user_invocable=True,
         )
         skill_instr = (
             f"[platform: {ctx.name}]\n"
