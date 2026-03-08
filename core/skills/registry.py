@@ -67,16 +67,20 @@ class SkillRegistry:
         platform: str,
         *,
         disabled: frozenset[str] = frozenset(),
+        exclude_user_invocable: bool = False,
     ) -> list[Skill]:
         """指定プラットフォームで利用可能なスキルを返す。
 
         Args:
             platform: プラットフォーム名 ("discord", "slack", ...)
             disabled: 無効にするスキル名の集合
+            exclude_user_invocable: True の場合、user_invocable スキルを除外する
         """
         result = []
         for skill in self._skills.values():
             if skill.name in disabled:
+                continue
+            if exclude_user_invocable and skill.user_invocable:
                 continue
             # platforms が空 = 全プラットフォーム対応
             if skill.platforms and platform not in skill.platforms:
@@ -93,12 +97,20 @@ class SkillRegistry:
         platform: str,
         *,
         disabled: frozenset[str] = frozenset(),
+        exclude_user_invocable: bool = False,
     ) -> str:
         """プラットフォーム向けのスキル指示テキストを結合して返す。
 
         空文字列を返す場合、注入すべきスキルがないことを意味する。
+
+        Args:
+            exclude_user_invocable: True の場合、user_invocable スキルを除外する。
+                通常会話では True にして grok-prompt 等の大きなスキルを省略し、
+                /skills-list からの発動時のみ False（デフォルト）で全スキルを注入する。
         """
-        skills = self.get_for_platform(platform, disabled=disabled)
+        skills = self.get_for_platform(
+            platform, disabled=disabled, exclude_user_invocable=exclude_user_invocable,
+        )
         if not skills:
             return ""
 

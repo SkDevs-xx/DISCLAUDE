@@ -166,7 +166,7 @@ def get_engine_name() -> str:
         print('[ERROR] config.json に "engine" キーがありません。', file=sys.stderr)
         print('例: {"engine": "claude"} または {"engine": "codex"}', file=sys.stderr)
         sys.exit(1)
-    return cfg["engine"]
+    return cfg["engine"].lower()
 
 def get_available_models() -> list[str]:
     """現在設定されているエンジンで利用可能なモデルIDのリストを返す。"""

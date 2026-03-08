@@ -287,11 +287,11 @@ class CliveBot(commands.Bot):
                     model, thinking = get_model_config()
                     registry_instr = self.skill_registry.build_instructions(
                         self.platform_context.name,
-                        disabled=self.platform_context.disabled_skills,
+                        disabled=self.platform_context.disabled_skills | frozenset({"heartbeat"}),
+                        exclude_user_invocable=True,
                     )
                     skill_instr = (
-                        f"[platform: {self.platform_context.name}]\n"
-                        + (f"\n{registry_instr}" if registry_instr else "")
+                        (f"{registry_instr}\n" if registry_instr else "")
                     )
                     response, timed_out, new_session_id = await run_engine(
                         full_prompt, model=model, thinking=thinking,
@@ -299,6 +299,7 @@ class CliveBot(commands.Bot):
                         is_new_session=is_new,
                         on_process=lambda p: self.running_processes.__setitem__(channel_id, p),
                         skill_instructions=skill_instr,
+                        platform_name=self.platform_context.name,
                     )
                     if is_new and new_session_id:
                         save_channel_session(channel_id, new_session_id)
