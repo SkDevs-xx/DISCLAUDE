@@ -276,6 +276,15 @@ class CliveBot(commands.Bot):
                 await message.add_reaction("🤔")
             except Exception:
                 pass
+            # slow スキルへのリクエストなら事前通知
+            for skill in self.skill_registry.all_skills():
+                if skill.slow and user_content.lstrip().startswith(f"/{skill.name}"):
+                    try:
+                        await message.channel.send("⏳ この処理は数分かかる場合があります。しばらくお待ちください...")
+                    except Exception:
+                        pass
+                    break
+
             async with message.channel.typing():
                 async with self.get_channel_lock(channel_id):
                     session_id = get_channel_session(channel_id)

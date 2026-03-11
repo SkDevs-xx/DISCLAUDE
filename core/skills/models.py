@@ -19,3 +19,4 @@ class Skill:
         default_factory=frozenset,
     )
     user_invocable: bool = False                   # ユーザーが直接呼べるか
+    slow: bool = False                             # 処理に時間がかかるか（事前通知用）
